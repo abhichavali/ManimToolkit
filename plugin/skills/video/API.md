@@ -20,6 +20,8 @@ mtk check v2_x.py -s S03   # one scene of a multi-scene file (prefixes, comma-se
   Read it to judge the picture: overlap, clutter, a beat whose picture doesn't match its words, wrong colors,
   LaTeX glitches. Read only `[NEW ]` boards; `[same]` means nothing visible changed.
 - Fix every `LINT` (or keep it on purpose and say why in your report). Then look. Then fix. Repeat.
+- `DRIFT x_n: SKY in S01,S02; INK in S04` (checking several scenes) means a concept shows in different colors
+  in different scenes: use `E(...)` so `colors(...)` applies, or say why it differs.
 - Write the whole file before the first check. Run `mtk check` in the foreground with a long Bash timeout
   (600000 ms); a voice missing from the cache is generated on the spot. Never background it or poll it.
 - Done when lint is clean and every tile of the storyboard shows what its beat says, judged on the board of your
@@ -67,11 +69,24 @@ class S03_Remainder(VScene):      # S## names, rendered in sorted order; 30-120 
 - `glow(m, color)` soft halo for a reveal, text or shapes (FadeIn it under m) · `strike(m)` line through · `Cross(m)` (manim) X over
 - `span(a, b, label, side=DOWN)` dimension marker · frame is 14.2 x 8, header at top-left
 
+**Worked problems** (walkthroughs): `self.try_it()` the "Try it before we solve it" pause · `answer_box(m)` ·
+`marked(row, good)` a choices() row already marked · `rubric(pts, items, traps)` grading points over the common trap
+(TX sentences) · `check(value, expected, rtol=2e-3)` asserts a number (relative: tiny SI values can't slip through)
+and returns it · `sci(2.18e6)` -> `2.18 \times 10^{6}` (TeX; plain decimals between 0.01 and 1000)
+
 **Plots and fields**
 - `axes(xr, yr, width=6, height=3, xlabel="x", ylabel="y", pi_ticks=False, boxed=False)`
 - `live(ax, f(x, t), tracker, color=SKY, n=240)` curve redrawn as `tracker` (a ValueTracker) moves · `dashed(curve)`
 - `field_image(f(X, Y), ax, xr, yr, cmap="seq"|"div", vmax)` one image, far cheaper than many squares
 - `readout(tex, fn, digits=3)` live number (drop()/wipe() clear its updater before fading)
+
+**Fake 3D** (fast: a numpy raster in one image, ~2.5x faster than `VScene3D` and smooth-shaded; use `VScene3D`
+only when the camera must fly through geometry). Camera `elev`/`azim` in degrees.
+- `SurfaceImage(grid, vals=None, width=4, elev=20, azim=-60, cmap="signed"|"heat", vmax=1, marks=[(mask, color)],
+  lines=(nu, nv))`; grids: `sphere_grid(n)`, `torus_grid(R, r, n)`, `param_grid(lambda u, v: (x, y, z), ur, vr)`;
+  `.redraw(azim=...)` in an updater spins or recolors it; `.at(xyz)` pins a Dot/label to a 3D point; `.facing(xyz)`
+- `Cloud(P, vals=None, height=5, elev=20, azim=-60)` point cloud; `.draw(...)` in an updater; `.screen_xy(i)`;
+  `normals=pca_normals(P)` shades the far side of a closed cloud
 
 **Structures**
 - `ArrayRow(values, index_from=1)`: `.cell(i) .val(i) .mark(i, color) .unmark(i) .set(i, v) .swap(i, j) .pointer(i, label)`
@@ -81,11 +96,14 @@ class S03_Remainder(VScene):      # S## names, rendered in sorted order; 30-120 
   `.kind(u, v, "tree"|"back"|"forward"|"cross"|color) .path(names) .tag(n, text)`; edges follow live node centers
 
 **Scene** (`VScene`: 2D with a movable camera; `VScene3D`: pin text with `self.add_fixed_in_frame_mobjects`)
-- `self.beat(text, *steps, w=None, style=None)` · `with self.say(text, style=None) as d:` (d = clip seconds)
+- `self.beat(text, *steps, w=None, style=None)`: steps share the clip; a number step is a pause **as a fraction of
+  the clip** (`.2`), never seconds · `with self.say(text, style=None) as d:` (d = clip seconds)
 - `self.title_card(kicker, title, sub)` -> mobject · `self.section(text)` plays + returns the header
 - `self.predict(question, narration, seconds=3)` pause-and-ponder card · `self.wipe()` · `self.drop(*mobs)`
 - `self.snap(label)` an extra storyboard still mid-beat · `self.lint_on = False` around a deliberate overlap
-- camera: `self.play(self.camera.frame.animate.scale(.4).move_to(p))`
+- camera: `self.play(self.camera.frame.animate.scale(.4).move_to(p))`; deep zooms: `self.play(self.zoom_to(p, 600,
+  keep=[curve, dot, (label, dot)]), run_time=4)`: exponential, p stays put; kept curves stay thin, kept dots and
+  text keep their screen size, and a (label, anchor) pair stays beside its anchor
 
 **Colors**: text `INK INK2 MUTED`; chrome `SURFACE HAIR AXIS BG`; `ACCENT GOOD BAD`; concept hues
 `SKY EMBER MINT LILAC LIME ROSE GOLD`. Reference/initial curves: `MUTED` dashed. Never manim's `BLUE`, `RED`, ...
@@ -94,11 +112,12 @@ class S03_Remainder(VScene):      # S## names, rendered in sorted order; 30-120 
 odd_periodic burgers_curve t_break laplace_hot_lid`, `rd_solve` + `as_field` (stable explicit solver), `front_position
 xt_diagram st_mask now_line char_curves`, family colors `TRANSPORT HEAT WAVE BURGERS REACTION ELLIPTIC`.
 
-**Recipes**: 23 tested patterns. `mtk recipe` lists them, `mtk recipe R04` prints one. R01 linear map, R02 complex
+**Recipes**: 26 tested patterns. `mtk recipe` lists them, `mtk recipe R04` prints one. R01 linear map, R02 complex
 map, R03 parameter tracker, R04 morphing derivation, R05 camera zoom, R06 epicycles, R07 flow field, R08 3D surface,
 R09 Riemann sums, R10 reveal choreography, R11 graph algorithm, R12 histogram to bell curve; P01 heat modes, P02
 masked x-t reveal, P03 characteristics, P04 d'Alembert, P05 Burgers breaking, P06 standing waves, P07 Laplace +
-mean value, P08 Gibbs, P09 Fisher front, P10 heat kernel, P11 drum mode 3D. Copy the technique, not the scene.
+mean value, P08 Gibbs, P09 Fisher front, P10 heat kernel, P11 drum mode 3D; R13 fake-3D sphere, R14 deep zoom;
+W01 walkthrough (Read, Solve, Trap). Copy the technique, not the scene.
 
 ## Craft
 

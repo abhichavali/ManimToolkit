@@ -13,8 +13,9 @@ tokens and wall-clock time the old `manim-explainer` skill spent, without changi
 |---|---|
 | `mtk/core.py` | The look, Gemini TTS narration (`say`, `beat`), lint, storyboard stills, `VScene`/`VScene3D` (successor of the per-project `vid.py`) |
 | `mtk/kit.py` | Pieces past videos kept rewriting: `E` (concept-colored math), `morph`, cards, MC choices, write-up sheets, `ArrayRow`, `CodeBlock`, `GraphMob`, `rec_tree` |
-| `mtk/pde.py`, `mtk/recipes.py` | PDE kit and the 23-recipe gallery, ported unchanged |
-| `mtk_cli.py` | The `mtk` command: `voice`, `brief`, `check`, `render`, `frames`, `recipe` |
+| `mtk/view3d.py` | Fast fake 3D: `SurfaceImage` (shaded surfaces) and `Cloud` (point clouds) as numpy rasters |
+| `mtk/pde.py`, `mtk/recipes.py` | PDE kit and the recipe gallery (26: R01-R14, P01-P11, W01) |
+| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `check`, `render`, `episodes`, `frames`, `recipe` |
 | `plugin/` | The skill: `SKILL.md` (coordinator), `API.md` (the one page scene writers read), problem-set and mind-blow docs |
 | `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards build (offline voice, no API cost) |
 
@@ -76,3 +77,22 @@ Race on the same script (4 scenes, 3:20), scene-writing phase:
 
 The skill uses Opus 5.5 at high effort for every scene (extra-high for the hook and the mind-blow reveal), and
 overlaps the final render with the coordinator's review.
+
+## v0.3: the machinery around the scenes
+
+Past series kept rebuilding the same things by hand: `episodes.py` was written 7 times, walkthrough helpers sat in
+39 files, and two projects each wrote a numpy rasterizer to dodge Cairo's slow 3D. Those are now library pieces:
+
+- **`mtk episodes BRIEF.md`**: `# Episode N: Title | sub` (or `# Problem N:`) headings group scenes into videos.
+  Each gets a full-quality join, a web copy under the artifact's 15 MB cap, a poster, WebVTT captions (from the
+  narration, logged at render time) and an entry in `web/episodes.json` with chapters. On the Newton test, 3:34 at
+  1080p became a 6.2 MB web copy in 29 s; caption cues land a median 0.26 s ahead of the speech, with no drift.
+- **Walkthrough mode** (`mtk new <slug> --walk`): one agent per exam problem with the Read, Solve, Trap shape, plus
+  `try_it`, `answer_box`, `marked`, `rubric`, `check` (relative tolerance only) and `sci` in the kit; recipe W01.
+- **Fake 3D**: `SurfaceImage`/`Cloud` redraw in ~16 ms. A spinning shaded sphere renders at 1.3x real time at
+  1080p, against 3.4x for a coarse `VScene3D` surface. **`zoom_to(p, factor, keep=[...])`**: an exponential zoom
+  that keeps curves thin and dots and labels screen-sized and beside their anchors (recipe R14).
+- **Guardrails for one agent per scene**: `DRIFT` lines when a declared concept changes color between scenes;
+  lints for unnarrated stretches and for animation that overruns its narration (it caught an 8 s silent stretch
+  from a race agent who passed `1.0` meaning one second to `beat()`); `mtk voice` lints the brief's shape;
+  `mtk brief` hands every agent the shared kits' docstrings; `mtk new` scaffolds a brief in the exact format.

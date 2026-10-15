@@ -94,6 +94,54 @@ def mark(row, good=True):
     return [ring.animate.set_fill(col, 1).set_stroke(col), letter.animate.set_color(BG), row[1].animate.set_color(col)]
 
 
+def marked(row, good=True):
+    """A choices() row already in mark()'s end state (a scene that opens with the answer filled in)."""
+    col = GOOD if good else BAD
+    row[0][0].set_fill(col, 1).set_stroke(col)
+    row[0][1].set_color(BG)
+    row[1].set_color(col)
+    return row
+
+
+def answer_box(m, color=GOLD, buff=0.15):
+    """The boxed final answer of a worked problem (Create it)."""
+    return SurroundingRectangle(m, color=color, buff=buff, corner_radius=0.08, stroke_width=3)
+
+
+def check(value, expected, rtol=2e-3):
+    """Assert a number before it goes on screen or into narration; returns value. Relative only: numpy's default
+    absolute floor (1e-8) would wave through any tiny SI value (coulombs, farads)."""
+    assert np.isclose(value, expected, rtol=rtol, atol=1e-12 if expected == 0 else 0), f"{value} != {expected}"
+    return value
+
+
+def sci(x, digits=2):
+    """Scientific notation as TeX: sci(2.18e6) -> '2.18 \\times 10^{6}'; plain decimals if 0.01 <= |x| < 1000."""
+    if x == 0:
+        return "0"
+    e = int(np.floor(np.log10(abs(x))))
+    if -2 <= e < 3:
+        return f"{x:.{max(digits - e, 0)}f}" if e < digits else f"{x:.0f}"
+    m = x / 10 ** e
+    if round(abs(m), digits) >= 10:
+        m, e = m / 10, e + 1
+    return rf"{m:.{digits}f} \times 10^{{{e}}}"
+
+
+def rubric(pts, items, traps, size=28):
+    """Grading points (MINT checklist) over the common trap (ROSE): items/traps are TX sentences ($math$ inline).
+    .rows (the checklist lines), .top, .trap. Already place()d."""
+    rows = VGroup(*[VGroup(M(r"\checkmark", size=30, color=MINT), TX(x, size)).arrange(RIGHT, buff=0.22)
+                    for x in items]).arrange(DOWN, aligned_edge=LEFT, buff=0.17)
+    top = panel(VGroup(T(f"GRADING POINTS  ·  {pts} PTS", 22, MINT, weight=BOLD), rows)
+                .arrange(DOWN, aligned_edge=LEFT, buff=0.28), MINT, 0.3)
+    tr = panel(VGroup(T("COMMON TRAP", 22, ROSE, weight=BOLD), *[TX(x, size) for x in traps])
+               .arrange(DOWN, aligned_edge=LEFT, buff=0.14), ROSE, 0.3)
+    g = place(VGroup(top, tr).arrange(DOWN, buff=0.3, aligned_edge=LEFT), "full")
+    g.rows, g.top, g.trap = rows, top, tr
+    return g
+
+
 def sheet(head, rows, col=3.2, row_buff=0.28):
     """Worked write-up on a panel: head mobject, then rows (label, color, [body mobjects]) with bodies in one
     column. .rows[k] = VGroup(chip, body); .head. Already place()d full-frame."""
@@ -336,7 +384,20 @@ def demo():
     assert len(morph(e, E(r"p|=|r"), [(0, 0), (1, 1), (4, 2)])) == 5
     m = fit(Square(4), w=2)
     assert abs(m.width - 2) < 1e-9
+    assert sci(2.18e6) == r"2.18 \times 10^{6}" and sci(9.996e-5) == r"1.00 \times 10^{-4}" and sci(0.5) == "0.500"
+    assert check(1.6e-19, 1.602e-19) and not _raises(lambda: check(1.6e-19, 1.5e-19))
+    r = choices([r"1", r"2"])
+    assert marked(r[0])[1].get_color().to_hex().lower() == GOOD
+    assert len(rubric(4, ["base case"], ["off by one"]).rows) == 1
     print("kit ok")
+
+
+def _raises(fn):
+    try:
+        fn()
+        return True
+    except AssertionError:
+        return False
 
 
 if __name__ == "__main__":

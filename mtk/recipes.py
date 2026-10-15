@@ -2,9 +2,10 @@
 
 Each R## scene is a short, silent, self-contained demo of one visual idea. Copy the pattern into your
 own scene, then narrate it with self.beat(...) / `with self.say(...) as d:`.
-R## are general; P## are PDE patterns built on mtk.pde (exact solutions, solvers, x-t diagrams).
+R## are general; P## are PDE patterns built on mtk.pde (exact solutions, solvers, x-t diagrams); W## walkthroughs.
 List: mtk recipe      Print one: mtk recipe P02      Storyboard one: mtk check -s P02_SpaceTime <this file>
 """
+from mtk import *
 from mtk.pde import *
 
 
@@ -647,3 +648,88 @@ class P11_DrumMode(VScene3D):
         self.add(surf)
         self.play(t.animate.set_value(2 * TAU / w), run_time=6, rate_func=linear)
         self.wait()
+
+
+class R13_FakeSurface(VScene):
+    """Fake 3D that renders fast: a shaded sphere colored by a spherical harmonic, spinning in a plain VScene.
+    Pattern: SurfaceImage + a ValueTracker for azim, redrawn in an updater (milliseconds per frame); pin labels
+    and dots to 3D points with .at(xyz). Prefer this to VScene3D (~10x slower) unless the camera flies through."""
+
+    def construct(self):
+        g = sphere_grid(200)
+        Y = 3 * np.cos(g.U) ** 2 - 1  # the l = 2, m = 0 harmonic up to scale: +2 at the poles, -1 on the equator
+        assert np.isclose(Y.max(), 2) and np.isclose(Y.min(), -1, atol=1e-3)
+        s = SurfaceImage(g, vals=Y / 2, width=5).shift(2 * LEFT)
+        az = ValueTracker(-60)
+        s.add_updater(lambda m: m.redraw(azim=az.get_value()))
+        pole = Dot(color=GOLD, radius=0.07).add_updater(lambda d: d.move_to(s.at([0, 0, 1])))
+        lab = VGroup(M(r"Y_2^0 \propto 3\cos^2\theta - 1", size=40),
+                     T("orange: positive · blue: negative", 26, INK2)).arrange(DOWN, buff=0.3).shift(3.6 * RIGHT)
+        self.add(s, pole)
+        self.play(FadeIn(lab), az.animate.set_value(300), run_time=6, rate_func=linear)
+        self.wipe()
+
+
+class R14_DeepZoom(VScene):
+    """Zoom hundreds of times toward a point while curves stay thin and dots and labels stay readable:
+    self.zoom_to(p, factor, keep=[...]). (label, dot) pairs keep a label beside its dot. Here: Newton's third
+    tangent for x^2 - 2, from x2 = 17/12, lands 0.000002 from sqrt 2; at 600x they still look like one point."""
+
+    def construct(self):
+        r2, x2 = np.sqrt(2), 17 / 12
+        x3 = (x2 + 2 / x2) / 2
+        assert np.isclose(x3 - r2, 2.124e-6, rtol=1e-3)
+        ax = axes([0, 2.5, 0.5], [-2, 4, 1], width=7, height=5)
+        f = ax.plot(lambda x: x * x - 2, x_range=[0, 2.1, 0.0005], color=LILAC, stroke_width=4)
+        # the tangent at x2 crosses zero exactly at x3: y = f(x2) + 2 x2 (x - x2)
+        tan = Line(ax.c2p(x2 + 0.4, x2 * x2 - 2 + 2 * x2 * 0.4), ax.c2p(x3 - 0.4, -2 * x2 * 0.4), color=MINT,
+                   stroke_width=3)
+        root, d3 = Dot(ax.c2p(r2, 0), color=GOLD, radius=0.06), Dot(ax.c2p(x3, 0), color=SKY, radius=0.05)
+        lr = M(r"\sqrt{2}", size=32, color=GOLD).next_to(root, UP + LEFT, buff=0.1)
+        l3 = M("x_3", size=32, color=SKY).next_to(d3, DOWN + RIGHT, buff=0.1)
+        self.play(Create(ax), Create(f), run_time=1.2)
+        self.play(Create(tan), FadeIn(root, d3, lr, l3), run_time=0.8)
+        self.play(self.zoom_to(root.get_center(), 600, keep=[f, tan, ax, root, d3, (lr, root), (l3, d3)]),
+                  run_time=4)
+        self.wait(1)
+        self.wipe()
+
+
+class W01_Walkthrough(VScene):
+    """An exam-problem walkthrough's pieces in their usual order, compressed into one silent scene. In a real
+    walkthrough they are three narrated scenes (mtk new --walk): S{NN}1_Read (title_card, the problem as a
+    picture or qcard, self.try_it()), S{NN}2_Solve (steps, answer_box, choices + mark), S{NN}3_Trap (mark(row,
+    False) on the tempting wrong choice, the one-line mistake, a key_box takeaway). Numbers go through check()."""
+
+    def construct(self):
+        k, q1, q2, r = 8.99e9, 3e-6, 4e-6, 0.30
+        F = check(k * q1 * q2 / r ** 2, 1.20)
+        trap = check(k * q1 * q2 / r, 0.36)  # forgot to square the distance
+        card = self.title_card("Practice midterm · Problem 2", "Two charges, one force", "Ch. 18 · Coulomb's law")
+        self.play(FadeIn(card, shift=0.2 * UP), run_time=0.8)
+        self.wait(1)
+        self.play(FadeOut(card), run_time=0.5)
+        q = qcard("PROBLEM 2", TX(r"Charges $q_1 = 3\,\mu$C and $q_2 = 4\,\mu$C sit $0.30$ m apart."),
+                  TX(r"How strong is the force between them?"))
+        self.play(FadeIn(q, shift=0.2 * UP), run_time=0.6)
+        self.wait(1)
+        self.play(q.animate.scale(0.85).to_edge(UP, buff=0.3), run_time=0.6)
+        steps = VGroup(E(r"F|=|k\frac{q_1 q_2}{r^2}", size=42),
+                       E(r"F|=|\frac{(8.99 \times 10^9)(3 \times 10^{-6})(4 \times 10^{-6})}{(0.30)^2}", size=38),
+                       E(r"F|=|" + sci(F) + r"\ \text{N}", size=42)).arrange(DOWN, buff=0.35, aligned_edge=LEFT)
+        steps.next_to(q, DOWN, buff=0.45).to_edge(LEFT, buff=1.0)
+        for st in steps:
+            self.play(Write(st), run_time=0.8)
+        box = answer_box(steps[2])
+        self.play(Create(box), run_time=0.5)
+        rows = choices([r"0.36\ \text{N}", r"1.20\ \text{N}", r"3.60\ \text{N}", r"12.0\ \text{N}"])
+        rows.next_to(steps, RIGHT, buff=1.4).align_to(steps, UP)
+        self.play(FadeIn(rows, lag_ratio=0.2), run_time=0.8)
+        self.play(*mark(rows[1]), run_time=0.6)
+        self.play(*mark(rows[0], good=False), run_time=0.6)
+        self.wait(0.5)
+        kb = key_box(r"F \propto \frac{1}{r^2}", sci(trap) + r"\ \text{N} \;=\; \text{forgot to square } r",
+                     label="THE TRAP")
+        self.play(FadeOut(VGroup(q, steps, box, rows)), FadeIn(place(kb, "full")), run_time=0.8)
+        self.wait(1)
+        self.wipe()

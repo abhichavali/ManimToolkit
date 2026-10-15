@@ -306,6 +306,7 @@ def tts(text, voice=None, style=None):
 TEXTY = (Text, MarkupText, SingleStringMathTex, DecimalNumber)  # MathTex and Tex subclass SingleStringMathTex
 SYMBOLS = re.compile(r"[=+^_\\]|[Ͱ-Ͽ←-⋿]")
 FROZEN = 6.0  # seconds of narration over an unchanging picture before lint complains
+QUIET = 4.0  # seconds without narration (inside a narrated scene) before lint complains
 SNAP = os.environ.get("MTK_SNAP")  # `mtk check` sets it: a folder for one still per beat (the storyboard)
 
 
@@ -386,6 +387,14 @@ class Narrated:
                                f"{_label(texts[i])} overlaps {_label(texts[j])}")
         if texts:
             self._lint_covered(roots, texts, w * h)
+        if SNAP:  # colors each math token is shown in, for `mtk check`'s cross-scene DRIFT report
+            pal = self.__dict__.setdefault("_pal", {})
+            for t in texts:
+                if isinstance(t, SingleStringMathTex):
+                    for part in [x for x in t.submobjects if getattr(x, "tex_string", None)] or [t]:  # MathTexPart
+                        tex = part.tex_string.strip()
+                        if 0 < len(tex) <= 24 and part.family_members_with_points():
+                            pal[(id(part), tex)] = part.family_members_with_points()[0].get_fill_color().to_hex().lower()
 
     def _lint_covered(self, roots, texts, area):
         """Text whose center sits under an opaque shape (or image) drawn after it: z-order bugs, cards drawn
@@ -437,6 +446,9 @@ class Narrated:
     def tear_down(self):
         super().tear_down()
         words, beats = getattr(self, "_words", 0), getattr(self, "_beats", 0)
+        tail = self.time - getattr(self, "_said_until", 0.0)
+        if beats and tail > QUIET + 0.6:  # + the closing wipe
+            self._warn("quiet-end", f"the scene ends with {tail:.1f}s of no narration")
         if self.budget and abs(words - self.budget) > 0.2 * self.budget:
             self._warn("budget", f"narration is {words} words; budget {self.budget} (keep within 20%)")
         if SNAP:
@@ -444,6 +456,15 @@ class Narrated:
                 self.snap("(end)")  # scenes that don't finish with wipe()
             Path(SNAP).mkdir(parents=True, exist_ok=True)
             (Path(SNAP) / "beats.json").write_text(json.dumps(getattr(self, "_snaps", [])))
+            seen = {}
+            for (_, tex), col in getattr(self, "_pal", {}).items():
+                seen.setdefault(tex, []).append(col)
+            (Path(SNAP) / "palette.json").write_text(json.dumps({
+                "concepts": sorted(COLORS), "tokens": {k: max(set(v), key=v.count) for k, v in seen.items()}}))
+        elif getattr(self, "_subs", None) and config.input_file:  # captions: mtk render / mtk episodes -> .vtt
+            d = Path(config.media_dir) / "subs"
+            d.mkdir(parents=True, exist_ok=True)
+            (d / f"{Path(config.input_file).stem}.{type(self).__name__}.json").write_text(json.dumps(self._subs))
         b = f"/{self.budget}" if self.budget else ""
         print(f"REPORT {type(self).__name__} {self.time:.1f}s {words}w{b} {beats} beats "
               f"{getattr(self, '_nwarn', 0)} warnings", flush=True)
@@ -452,6 +473,10 @@ class Narrated:
     def say(self, text, style=None):
         """style overrides the delivery for this line only (e.g. 'slow, quiet, awed' for a reveal)."""
         n = len(text.split())
+        gap = self.time - getattr(self, "_said_until", 0.0)
+        if gap > QUIET and self.lint_on:
+            self._warn(("quiet", text), f"{gap:.1f}s with no narration before {text[:30]!r}: talk over it, "
+                                        "shorten it, or keep it on purpose")
         self._words = getattr(self, "_words", 0) + n
         self._beats = getattr(self, "_beats", 0) + 1
         bad = sorted(set(SYMBOLS.findall(text)))
@@ -463,6 +488,8 @@ class Narrated:
         # straight to the file writer: Scene.add_sound is a no-op right after a cached animation
         self.renderer.file_writer.add_sound(str(path), self.time)
         t0 = self.time
+        if not SNAP:
+            self.__dict__.setdefault("_subs", []).append({"t": round(t0, 3), "dur": round(dur, 3), "text": text})
         yield dur
         left = dur - (self.time - t0)
         if left > 0:
@@ -470,8 +497,12 @@ class Narrated:
                 self._warn(("frozen", t0), f"picture frozen for {left:.1f}s while narrating {text[:30]!r}: "
                                            "highlight what's being said, or split the beat")
             self.wait(left)
+        elif -left > QUIET and self.lint_on:
+            self._warn(("overrun", t0), f"the animation runs {-left:.1f}s past its narration {text[:30]!r}, on a "
+                                        "silent track: shorten it (beat() pauses are fractions of the clip, not seconds)")
         self.snap(text)
         self.wait(self.GAP)
+        self._said_until = self.time
 
     def beat(self, text, *steps, w=None, style=None):
         """Narrate text while the steps play in order. A step is an animation, a list/tuple of animations played
@@ -541,10 +572,49 @@ class Narrated:
         self.play(Uncreate(ring), run_time=seconds, rate_func=linear)
         self.play(FadeOut(card), run_time=0.4)
         self.lint_on = True
+        self._said_until = self.time  # the countdown is a deliberate silence
+
+    def try_it(self, seconds=2.5):
+        """The walkthrough pause: 'Try it before we solve it.'"""
+        self.predict("Try it before we solve it.", "Pause here and give it a try.", seconds=seconds)
 
 
 class VScene(Narrated, MovingCameraScene):
     """2D scene; self.camera.frame can pan and zoom (self.play(self.camera.frame.animate.scale(0.4).move_to(p)))."""
+
+    def zoom_to(self, point, factor, keep=()):
+        """Animation: zoom the camera `factor` times (exponentially, so it feels steady; < 1 zooms out) toward
+        `point`, which stays put on screen. Things in `keep` don't magnify like the world does:
+          a Dot or text keeps its screen size;  (label, anchor) also stays at its screen offset from anchor;
+          anything else (curves, axes, lines) keeps its shape but its strokes stay thin.
+        self.play(self.zoom_to(root, 600, keep=[curve, tangent, dot, (label, dot)]), run_time=4)"""
+        f, p = self.camera.frame, np.array(point, float)
+        c0, w0 = f.get_center().copy(), f.width
+        items = []
+        for k in keep:
+            m, anchor = k if isinstance(k, tuple) else (k, None)
+            point_like = anchor is not None or isinstance(m, (Dot,) + TEXTY) or (
+                isinstance(m, VGroup) and all(isinstance(x, (Dot,) + TEXTY) for x in m.submobjects))
+            off = m.get_center() - anchor.get_center() if anchor is not None else None
+            items.append([m, anchor, point_like, off, [(x, x.get_stroke_width()) for x in m.family_members_with_points()
+                                                         if isinstance(x, VMobject)], 1.0])
+
+        def upd(frame, a):
+            s = factor ** a
+            frame.set_width(w0 / s)
+            frame.move_to(p + (c0 - p) / s)
+            for it in items:
+                m, anchor, point_like, off, strokes, prev = it
+                if point_like:
+                    m.scale(prev / s)
+                    if anchor is not None:
+                        m.move_to(anchor.get_center() + off / s)
+                else:
+                    for x, w in strokes:
+                        x.set_stroke(width=w / s)
+                it[5] = s
+
+        return UpdateFromAlphaFunc(f, upd)
 
 
 class VScene3D(Narrated, ThreeDScene):

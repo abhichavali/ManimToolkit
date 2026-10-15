@@ -48,7 +48,9 @@ mtk recipe >/dev/null && ffmpeg -version | head -1 && which pdflatex && (test -s
 
 ## 2. Set up the project
 
-`P=~/Movies/Explainers/<slug>` (or `--out`): `mkdir -p "$P"`. Write BRIEF.md straight into it.
+`mtk new <slug>` creates `~/Movies/Explainers/<slug>/` (or `--dir <--out>`) with a BRIEF.md skeleton in the
+exact format below (`--walk` for exam walkthroughs, see Walkthrough mode); call that folder `P` and fill the brief
+in place.
 Voice: only if the user asks (`import mtk.core as core; core.VOICE = "Charon"` in every file, and
 `mtk voice BRIEF.md --voice Charon`).
 
@@ -81,9 +83,12 @@ Picture: one or two lines: the layout and what's on screen overall; recipes to b
 2. "Next beat."
    → ...
 
-## S02_<Name> [<words>]
+## S02_<Name> [<words>] <chapter label>
 ...
 ````
+
+A series: put `# Episode N: Title | subtitle` above each episode's scenes; `mtk episodes` builds one video per
+episode from these headings. Text after `[budget]` becomes the scene's chapter label.
 
 - Draft straight into the file (scene list and budgets first, then the beats), not in your head first: the
   brief is the one long sequential step, and writing it twice (once in thinking, once in the file) doubles it.
@@ -98,13 +103,14 @@ Picture: one or two lines: the layout and what's on screen overall; recipes to b
 - With `--mind-blow`: candidates, the chosen moment (or why none fits), and its plant and reveal beats.
 - Scene writers never open the source: every fact they need is in the brief.
 
-Then `cd "$P" && mtk voice BRIEF.md`: it voices every line in parallel (the scene checks later find them cached)
-and prints each scene's length against its `[budget]`. Edit the prose until the total fits the target; only
-changed lines get re-voiced.
+Then `cd "$P" && mtk voice BRIEF.md`: it voices every line in parallel (the scene checks later find them cached),
+prints each scene's length against its `[budget]`, and flags beats with no `→` line, scenes with no budget and a
+missing `colors(` line. Edit the prose until the total fits the target; only changed lines get re-voiced.
 
 Shared objects: if a visual appears in more than one scene (a graph, a figure, a solver, the hook's table that
 returns at the end), write `$P/<topic>.py` before spawning: `from mtk import *`, the builders, the asserted facts,
-a docstring listing its API, under ~150 lines. Name it in the brief's shared part so every scene uses the same one.
+a docstring listing its API, under ~150 lines. `mtk brief` prints every shared module's docstring to each scene
+agent, so they all build from the same pieces.
 
 ## 4. Write the scenes: one agent per scene, all at once
 
@@ -126,7 +132,8 @@ waves of ~10 to stay clear of usage limits.
 - `mtk check` (fast: everything is cached) for the lint lines and lengths, then read every storyboard once,
   all in one message with parallel Reads (`media/board/*.png`: a still per beat, captioned with its narration). Is each idea obvious from the picture?
   Does every beat show what its words say? Anything cluttered, static, off-palette? Is the rigor all there?
-  Continuity across scenes (notation, colors, callbacks)?
+  Continuity across scenes (notation, colors, callbacks)? A `DRIFT` line means a concept changes color between
+  scenes: send it to the scenes' agents.
 - Send fixes to the scene's agent (SendMessage: beat number, what's wrong). When they're done, run `mtk render`
   again: manim's cache skips every unchanged animation, so only the fixed scenes re-render.
 - Series over ~30 minutes: give each episode's board review to a fresh agent that returns notes, so your own
@@ -134,10 +141,27 @@ waves of ~10 to stay clear of usage limits.
 
 ## 6. Final checks
 
-`mtk render` joins everything into `out/<folder>.mp4` with gap-free audio and prints a chapter list (keep it for
-the problem set and the summary) and every silence over 3 s (each must be deliberate). Storyboards show beat
+`mtk render` joins everything into `out/<folder>.mp4` with gap-free audio and captions (`out/<folder>.vtt`, from the
+narration) and prints a chapter list (keep it for the problem set and the summary) and every silence over 3 s
+(each must be deliberate). For a series, a site or an artifact page: `mtk episodes BRIEF.md` builds per episode (or
+per problem) `out/<stem>.mp4`, a web copy under the artifact's 15 MB per-file cap (`--mb-per-min` for a site-wide
+budget), a poster, captions and `web/episodes.json` (titles, durations, chapters) for the page to read. Storyboards show beat
 ends; check motion and full resolution with one image: `mtk frames out/<name>.mp4 <4-6 seconds mid-animation in
 the busiest scenes>`, then Read it.
+
+## Walkthrough mode (exam problems)
+
+When the user wants practice problems or an exam walked through ("walk me through this practice midterm"), each
+problem gets its own ~2 to 2.5 minute video. Problems are independent, so their agents write their own narration.
+- `mtk new <slug> --walk` gives the brief: shared viewer, tone and colors, then per problem `# Problem N: Title |
+  Ch. · topic · review: Episode K`, a facts block (statement, choices, answer, every solution number, the tempting
+  wrong choice and the mistake behind it), and three scenes `S{NN}1_Read`, `S{NN}2_Solve`, `S{NN}3_Trap` with
+  word budgets. Check every answer yourself first (numpy/sympy, or the course's key: keys have been wrong).
+- One agent per problem, all at once (`model: "opus"`, `effort: "high"`), prompted: "Write problem N of the
+  walkthroughs in `<P>` as `<P>/pNN.py`. First read `<skill dir>/API.md` (mandatory rules), then run `cd <P> &&
+  mtk brief BRIEF.md pNN`. Read nothing else. Write the narration yourself under API.md's rules. Report in at most
+  8 lines." (`mtk recipe W01` shows the Read/Solve/Trap pieces.)
+- Review as above, then `mtk render` and `mtk episodes BRIEF.md` (one web video per problem, `pNN.mp4`).
 
 ## 7. Problem set (only with --problems)
 
