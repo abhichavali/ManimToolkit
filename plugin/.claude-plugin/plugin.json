@@ -1,0 +1,10 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "manim-explainer",
+  "version": "0.2.0",
+  "description": "3Blue1Brown-style narrated manim explainer videos, with optional problem sets and blow-your-mind mode",
+  "author": {
+    "name": "Abhinav Chavali",
+    "email": "abhinavchavali12@gmail.com"
+  }
+}

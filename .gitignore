@@ -1,0 +1,4 @@
+media/
+audio/
+__pycache__/
+*.egg-info/

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mtk"
+version = "0.2.0"
+description = "Manim toolkit for narrated 3Blue1Brown-style explainer videos (look, TTS beats, lint, storyboards)"
+requires-python = ">=3.10"
+dependencies = ["manim>=0.19", "numpy", "pillow"]
+
+[project.scripts]
+mtk = "mtk_cli:main"
+
+[tool.setuptools]
+packages = ["mtk"]
+py-modules = ["mtk_cli"]
