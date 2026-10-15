@@ -1,13 +1,18 @@
 # mtk: everything a scene writer needs
 
-This page and your part of `BRIEF.md` are all you read. Target: a polished 3Blue1Brown explainer. Visual first,
-then the math that explains it. Dense, warm, no filler.
+This page and your brief are all you read. Target: a polished 3Blue1Brown explainer. Visual first, then the
+math that explains it. Dense, warm, no filler.
+
+**Your job is one scene.** `mtk brief BRIEF.md S03` prints the shared facts and colors, what the scenes around
+yours open with, and your scene: numbered beats, each a quoted narration line plus `→` what the screen does.
+The narration is final and already voiced. Your work is the picture: turn each `→` into animation on that beat.
+Plan briefly, write the scene in one go, then let `mtk check` and the storyboard tell you what to fix.
 
 ## The loop (this exact loop, nothing else)
 
 ```bash
-mtk check v2_x.py          # dry run, no video, ~5-15 s: LINT/REPORT lines + one storyboard PNG per scene
-mtk check v2_x.py -s S03   # just scene S03 (prefixes, comma-separated)
+mtk check s03_squares.py   # dry run, no video, a few seconds: LINT/REPORT lines + the scene's storyboard PNG
+mtk check v2_x.py -s S03   # one scene of a multi-scene file (prefixes, comma-separated)
 ```
 - One line per scene: length, words/budget, beats, warnings, storyboard path, `[NEW ]` or `[same]`. A crash
   prints `FAILED`, the line in your file and the exception, so you never need to open a log.
@@ -16,13 +21,15 @@ mtk check v2_x.py -s S03   # just scene S03 (prefixes, comma-separated)
   LaTeX glitches. Read only `[NEW ]` boards; `[same]` means nothing visible changed.
 - Fix every `LINT` (or keep it on purpose and say why in your report). Then look. Then fix. Repeat.
 - Write the whole file before the first check. Run `mtk check` in the foreground with a long Bash timeout
-  (600000 ms): the first run generates the voices (in parallel, under a minute). Never background it or poll it.
+  (600000 ms); a voice missing from the cache is generated on the spot. Never background it or poll it.
+- Done when lint is clean and every tile of the storyboard shows what its beat says, judged on the board of your
+  final version (re-read it after your last change). Usually 1-3 rounds.
 - Never render video (`manim -ql`, `mtk render`): the coordinator does the final pass.
 
 ## Skeleton
 
 ```python
-"""Part 2: the remainder as a height (BRIEF.md part 2)."""
+"""S03: the remainder as a height (BRIEF.md S03)."""
 from mtk import *                 # manim + numpy + everything below (PDE topics: from mtk.pde import *)
 colors(p=SKY, s=EMBER, q=MINT)    # the video's concept -> hue map (same line in every file; E() reads it)
 
@@ -30,10 +37,10 @@ colors(p=SKY, s=EMBER, q=MINT)    # the video's concept -> hue map (same line in
 assert np.isclose(2 ** 10, 1024)
 
 class S03_Remainder(VScene):      # S## names, rendered in sorted order; 30-120 s each
-    budget = 120                  # narration words from the brief: LINT if off by > 20%
+    budget = 120                  # the [N] in the brief's heading: LINT if off by > 20%
     def construct(self):
         eq = E(r"p|=|s|\cdot|q|+|r", size=56)
-        self.beat("Here's the whole idea in one line.", Write(eq))
+        self.beat("Here's the whole idea in one line.", Write(eq))   # beat 1, quoted verbatim from the brief
         self.beat("Steps play in order and share the clip: a list plays together, a number pauses.",
                   Indicate(eq[2]), [FadeIn(a), FadeIn(b)], .2, Create(c), w=(.2, .3, .3))
         with self.say("For choreography beat() can't express, size run_times as fractions of d.") as d:
@@ -54,10 +61,10 @@ class S03_Remainder(VScene):      # S## names, rendered in sorted order; 30-120 
 **Layout and cards**
 - `place(m, "full"|"left"|"right"|"top"|"bottom")` shrink-to-fit a slot clear of the header · `fit(m, w, h)` shrink only
 - `backed(m)` text on a BG plate (over grids/fields) · `panel(m, color=HAIR)` SURFACE card, `[1]` is m
-- `key_box(*tex_lines, label="KEY IDEA")` end-of-section summary · `qcard(tag, *mobs)` question card
+- `key_box(*lines, label="KEY IDEA")` end-of-section summary; lines are TeX strings or mobjects (`E(...)` keeps colors) · `qcard(tag, *mobs)` question card
 - `sheet(head, [(label, color, [mobs]), ...])` worked write-up rows (`.rows[k]`, `.head`), already placed
 - `chip(name, color)` tag · `badge(n)` numbered circle · `choices([tex, ...])` A-D rows + `mark(row, good)` -> anims
-- `glow(m, color)` halo for a reveal (FadeIn it under m) · `strike(m)` line through · `Cross(m)` (manim) X over
+- `glow(m, color)` soft halo for a reveal, text or shapes (FadeIn it under m) · `strike(m)` line through · `Cross(m)` (manim) X over
 - `span(a, b, label, side=DOWN)` dimension marker · frame is 14.2 x 8, header at top-left
 
 **Plots and fields**
@@ -109,12 +116,14 @@ mean value, P08 Gibbs, P09 Fisher front, P10 heat kernel, P11 drum mode 3D. Copy
 
 ## Narration
 
-- Budget ~125 words per finished minute (the voice reads ~150 wpm; pauses and motion fill the rest). First drafts
-  run 2x long: hit the brief's per-scene budget within 15% (`budget = N` makes the check enforce it).
-- 1-3 sentences per beat (4-20 s). Many short beats sync better than one long one. American spelling.
-- Write for the ear: "u-t equals u-x-x", "e to the minus n squared t", "two pi". No `= + ^ _ \` or Unicode math
-  (lint flags them). Plain string literals, no f-strings: the audio cache keys on the exact text.
-- Conversational, confident, a little playful ("watch this", "here's the punchline"); never padded, no hype words.
+- **In a script-first brief the narration is final**: one quoted line = one `beat`/`say`, copied verbatim (a changed
+  character costs a new voice call and drifts from the script). You may split a line at a sentence boundary when
+  the picture needs two steps; never reword, add or drop words. Narration that seems wrong: say so in your report.
+- Writing narration (the coordinator, in the brief): ~125 words per finished minute (the voice reads ~150 wpm;
+  pauses and motion fill the rest); 1-3 sentences per beat (4-20 s); write for the ear ("u-t equals u-x-x",
+  "e to the minus n squared t", "two pi"), no `= + ^ _ \` or Unicode math; American spelling; conversational,
+  confident, a little playful ("watch this", "here's the punchline"), never padded, no hype words.
+- Plain string literals in code, no f-strings: the audio cache keys on the exact text.
 
 ## Visual rules
 

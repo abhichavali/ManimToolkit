@@ -3,6 +3,9 @@
   mtk check  [files] [-s SCENE..] [-j N]   dry run (no video): LINT/REPORT lines + one storyboard per scene
                                            (a still at the end of every beat, captioned with its narration)
   mtk render [files] [-q l|m|h|k] [-o NAME] [-j N]   render (default h = 1080p30) and join into out/NAME.mp4
+  mtk voice  BRIEF.md [--voice NAME]       voice the script (numbered "quoted" beats under ## S## headings) in
+                                           parallel; print each scene's spoken length against its [budget]
+  mtk brief  BRIEF.md S03                  what a scene agent needs: the shared part, its scene, its neighbors
   mtk frames VIDEO SEC [SEC..]             one captioned sheet of full-quality frames, for spot checks
   mtk recipe [NAME]                        list the recipe gallery, or print one recipe's source
 
@@ -183,6 +186,76 @@ def board(snapdir, out):
     return paths, changed
 
 
+HEAD = re.compile(r"^#+\s*(S\d+\w*)(?:[^\[]*\[(\d+)\])?")
+BEAT = re.compile(r'^\s*\d+[.)]\s+"([^"]+)"(?:\s*\(style:\s*([^)]*)\))?')
+
+
+def script(path):
+    """{scene: (budget words, [(narration, style), ...])} from a script-first brief."""
+    out, cur = {}, None
+    for ln in Path(path).read_text().splitlines():
+        h = HEAD.match(ln)
+        if h:
+            cur = h.group(1)
+            out[cur] = (int(h.group(2)) if h.group(2) else None, [])
+        elif cur and BEAT.match(ln):
+            b = BEAT.match(ln)
+            out[cur][1].append((b.group(1).strip(), b.group(2)))
+    return out
+
+
+def voice(a):
+    import warnings
+    warnings.filterwarnings("ignore", category=SyntaxWarning)
+    import mtk.core as core
+    sc = script(a.brief)
+    if not any(bs for _, bs in sc.values()):
+        sys.exit('no beats found: under "## S01_Name [words]" headings, write beats as  1. "Narration."')
+    core.config.input_file = str(Path(a.brief).resolve())  # audio/ next to the brief = the project folder
+    jobs = [(t, st) for _, bs in sc.values() for t, st in bs]
+    with cf.ThreadPoolExecutor(8) as ex:
+        got = dict(zip(jobs, ex.map(lambda j: _quiet(core.tts, j[0], a.voice, j[1]), jobs)))
+    total = words = 0.0
+    for name, (budget, bs) in sc.items():
+        w = sum(len(t.split()) for t, _ in bs)
+        sec = sum(got[b][1] for b in bs if got[b]) + 0.3 * len(bs) + 1.0  # breaths + the closing wipe
+        total, words = total + sec, words + w
+        flag = f"  <- {w - budget:+d} words vs [{budget}]" if budget and abs(w - budget) > 0.15 * budget else ""
+        print(f"{name:24s} {len(bs):2d} beats {w:4d}w  ~{sec:5.1f}s{flag}")
+        for i, (t, _) in enumerate(bs, 1):
+            bad = sorted(set(core.SYMBOLS.findall(t)))
+            if bad:
+                print(f"    beat {i}: contains {' '.join(bad)}; spell math out")
+            if len(t.split()) > 60:
+                print(f"    beat {i}: {len(t.split())} words; split it")
+            if not got[(t, _)]:
+                print(f"    beat {i}: voice failed (the scene's check will retry)")
+    print(f"TOTAL ~{int(total // 60)}:{int(total % 60):02d} of narration with breaths ({int(words)} words); "
+          "animation overruns add a little")
+
+
+def brief(a):
+    ls = Path(a.brief).read_text().splitlines()
+    heads = [i for i, ln in enumerate(ls) if ln.startswith("#")]
+    scenes = [i for i in heads if HEAD.match(ls[i])]
+    hit = [i for i in scenes if HEAD.match(ls[i]).group(1).startswith(a.scene)]
+    if not hit:
+        sys.exit(f"no scene {a.scene} in {a.brief}")
+    i = hit[0]
+    end = next((j for j in heads if j > i), len(ls))
+    name = HEAD.match(ls[i]).group(1)
+    print("\n".join(ls[:scenes[0]]).rstrip())
+    k = scenes.index(i)
+    for label, j in (("Before you", k - 1), ("After you", k + 1)):
+        if 0 <= j < len(scenes):
+            first = next((BEAT.match(x).group(1) for x in ls[scenes[j]:] if BEAT.match(x)), "")
+            print(f"\n{label}: {ls[scenes[j]].lstrip('# ')} (opens: \"{first[:90]}\")")
+    budget = HEAD.match(ls[i]).group(2)
+    print(f"\nYOUR SCENE: class {name}(VScene) in {name.lower()}.py"
+          + (f", budget = {budget} (narration words, not seconds)" if budget else "") + "\n")
+    print("\n".join(ls[i:end]).rstrip())
+
+
 def check(a):
     pairs = find(a.files, a.scene)
     prefetch(pairs)
@@ -321,6 +394,14 @@ def main():
             c.add_argument("-q", default="h", choices=QUAL)
             c.add_argument("-o", help="output name (default: the file, or this folder for several)")
         c.set_defaults(fn=fn)
+    c = sub.add_parser("voice")
+    c.add_argument("brief")
+    c.add_argument("--voice", help="TTS voice, if the video doesn't use the default")
+    c.set_defaults(fn=voice)
+    c = sub.add_parser("brief")
+    c.add_argument("brief")
+    c.add_argument("scene", help="scene name or prefix, e.g. S03")
+    c.set_defaults(fn=brief)
     c = sub.add_parser("frames")
     c.add_argument("video")
     c.add_argument("sec", nargs="+")

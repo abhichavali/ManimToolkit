@@ -14,7 +14,7 @@ tokens and wall-clock time the old `manim-explainer` skill spent, without changi
 | `mtk/core.py` | The look, Gemini TTS narration (`say`, `beat`), lint, storyboard stills, `VScene`/`VScene3D` (successor of the per-project `vid.py`) |
 | `mtk/kit.py` | Pieces past videos kept rewriting: `E` (concept-colored math), `morph`, cards, MC choices, write-up sheets, `ArrayRow`, `CodeBlock`, `GraphMob`, `rec_tree` |
 | `mtk/pde.py`, `mtk/recipes.py` | PDE kit and the 23-recipe gallery, ported unchanged |
-| `mtk_cli.py` | The `mtk` command: `check`, `render`, `frames`, `recipe` |
+| `mtk_cli.py` | The `mtk` command: `voice`, `brief`, `check`, `render`, `frames`, `recipe` |
 | `plugin/` | The skill: `SKILL.md` (coordinator), `API.md` (the one page scene writers read), problem-set and mind-blow docs |
 | `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards build (offline voice, no API cost) |
 
@@ -56,3 +56,23 @@ and `mtk check`. It finished with 0 lint, caught a rounding error in the brief, 
 Past parts were usually 4-7 min against this trial's 3.4 min, so per minute of video the saving is roughly 3-4x,
 not the raw 6x. Wall-clock time was dominated by model generation, not tooling: a first `mtk check` of a new
 file takes ~25 s (voices are prefetched in parallel), and later checks take ~3 s per scene.
+
+## Speed: script first, one agent per scene
+
+Generation, not rendering, is what makes a video slow: the single-agent trial above spent ~38K output tokens
+planning four scenes and their narration in its head before writing a line, then finished review and fixes in
+3 minutes. So the skill now has the coordinator write the exact narration and the picture for every beat into
+`BRIEF.md` (where the story's quality is decided anyway); `mtk voice BRIEF.md` voices it in parallel and prints
+each scene's real length before any code exists; and one agent per scene, all in parallel, writes only the
+picture, starting from `mtk brief BRIEF.md S03`.
+
+Race on the same script (4 scenes, 3:20), scene-writing phase:
+
+| | wall time (slowest agent) | input tokens | quality |
+|---|---|---|---|
+| Opus 5.5, one agent per scene | 9.3 min | 3.7M | best: extra steps, annotations, a careful zoom |
+| Sonnet, one agent per scene | 2.0 min | 2.4M | correct and clean, plainer |
+| Opus, one agent for all 4 (old shape) | 2 h 46 min (a slow-API day) | 2.5M | baseline |
+
+The skill uses Opus 5.5 at high effort for every scene (extra-high for the hook and the mind-blow reveal), and
+overlaps the final render with the coordinator's review.

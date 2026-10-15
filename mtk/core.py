@@ -148,8 +148,8 @@ def field_image(f, ax, x_range, y_range, cmap="seq", vmax=1.0, nx=480, ny=360, o
 
 
 def key_box(*lines, width=11, color=ACCENT, label="KEY IDEA"):
-    """Summary card: lines are MathTex strings (wrap words in \\text{})."""
-    body = VGroup(*[M(l, size=36) for l in lines]).arrange(DOWN, buff=0.25)
+    """Summary card: lines are MathTex strings (wrap words in \\text{}) or mobjects, e.g. E(...) for concept colors."""
+    body = VGroup(*[l if isinstance(l, Mobject) else M(l, size=36) for l in lines]).arrange(DOWN, buff=0.25)
     inner = VGroup(T(label, 22, color, weight=BOLD), body).arrange(DOWN, buff=0.3)
     box = RoundedRectangle(corner_radius=0.2, width=max(width, inner.width + 0.8), height=inner.height + 0.7,
                            stroke_color=color, stroke_width=2.5, fill_color=SURFACE, fill_opacity=1)
@@ -159,8 +159,11 @@ def key_box(*lines, width=11, color=ACCENT, label="KEY IDEA"):
 def glow(m, color=None, layers=8, width=24, opacity=0.6):
     """Soft halo behind m: stacked stroke copies, so the core is brightest. FadeIn(glow(eq)) under a reveal."""
     color = color or m.get_color()
-    return VGroup(*[m.copy().set_fill(opacity=0).set_stroke(color, width=width * i / layers, opacity=opacity / layers)
-                    for i in range(layers, 0, -1)])
+    g = VGroup(*[m.copy().set_fill(opacity=0).set_stroke(color, width=width * i / layers, opacity=opacity / layers)
+                 for i in range(layers, 0, -1)])
+    for x in g.family_members_with_points():
+        x.joint_type = LineJointType.ROUND  # miter joints spike out of glyph corners
+    return g
 
 
 # layout slots (center, width, height) in the 14.2 x 8 frame, clear of the section header
