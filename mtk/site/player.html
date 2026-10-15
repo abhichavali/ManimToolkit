@@ -1,0 +1,436 @@
+<meta charset="utf-8">
+<title>{{TITLE}}</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a player-first study page. The stage (video, chapter timeline, chapters, transcript) on the left,
+   the shelf of episodes and problems on the right; one column on phones. Dark-first, like the videos. */
+:root {
+  --bg: #0f1116; --surface: #15171c; --raise: #1b1e25; --hair: #262a33;
+  --ink: #eef0f4; --ink2: #b4b9c6; --muted: #7d8394; --accent: #95a2ff; --on-accent: #0f1116;
+  --sky: #4a95ff; --ember: #ff7a3d; --mint: #22c58b; --lilac: #a497ff; --gold: #ffd27a; --rose: #f06ea0;
+  --good: #35c46a; --scrim: rgba(15, 17, 22, .78);
+  --display: "Figtree", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Figtree", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f4f5f8; --surface: #ffffff; --raise: #eceef3; --hair: #dadde5;
+  --ink: #12141a; --ink2: #3a404d; --muted: #646b7a; --accent: #4a57c9; --on-accent: #ffffff;
+  --sky: #1f6fe0; --ember: #d9581c; --mint: #0f8f62; --lilac: #6c5ce0; --gold: #a67200; --rose: #c43a72;
+  --good: #1e8a47; --scrim: rgba(15, 17, 22, .72); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f4f5f8; --surface: #ffffff; --raise: #eceef3; --hair: #dadde5;
+  --ink: #12141a; --ink2: #3a404d; --muted: #646b7a; --accent: #4a57c9; --on-accent: #ffffff;
+  --sky: #1f6fe0; --ember: #d9581c; --mint: #0f8f62; --lilac: #6c5ce0; --gold: #a67200; --rose: #c43a72;
+  --good: #1e8a47; --scrim: rgba(15, 17, 22, .72); color-scheme: light; }
+
+body { background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 56px; display: grid; gap: 28px; }
+.top { display: grid; gap: 10px; }
+.kicker { font: 600 12px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0; }
+h1 { font: 800 clamp(28px, 4.2vw, 46px)/1.08 var(--display); margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+.blurb { margin: 0; color: var(--ink2); max-width: 64ch; }
+.bar { display: flex; gap: 4px; margin-top: 6px; }
+.bar i { width: 28px; height: 4px; border-radius: 1px; }
+.meta { color: var(--muted); font: 500 13px/1 var(--mono); font-variant-numeric: tabular-nums; }
+
+.layout { display: grid; gap: 28px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; } }
+.stage { display: grid; gap: 16px; min-width: 0; }
+.frame { position: relative; aspect-ratio: 16 / 9; max-width: 100%; background: #000; border-radius: 10px; overflow: hidden; }
+.frame video { width: 100%; height: 100%; display: block; background: #000; }
+.vov { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 80%; text-align: center;
+  padding: 10px 16px; border-radius: 8px; background: var(--scrim); color: #eef0f4; font: 500 14px/1.4 var(--body);
+  pointer-events: none; }
+.vov button { pointer-events: auto; }
+.next { font: 600 15px/1.2 var(--body); color: var(--on-accent); background: var(--accent); border: 0; border-radius: 999px;
+  padding: 10px 18px; cursor: pointer; }
+.now { display: grid; gap: 4px; min-width: 0; }
+.now h2 { font: 800 clamp(20px, 2.4vw, 26px)/1.2 var(--display); margin: 0; text-wrap: balance; }
+.now .sub { margin: 0; color: var(--ink2); }
+
+.tl { position: relative; display: flex; gap: 2px; height: 10px; cursor: pointer; }
+.tl span { height: 100%; border-radius: 2px; opacity: .55; transition: opacity .15s; }
+.tl span.on { opacity: 1; }
+.tl .head { position: absolute; top: -4px; width: 2px; height: 18px; background: var(--ink); border-radius: 1px; pointer-events: none; }
+.chapters { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.chapters button { width: 100%; display: grid; grid-template-columns: 12px 56px minmax(0, 1fr); gap: 10px; align-items: center;
+  text-align: left; background: none; border: 0; border-radius: 6px; padding: 7px 10px; color: var(--ink2); font: 500 14px/1.35 var(--body); cursor: pointer; }
+.chapters button:hover { background: var(--raise); color: var(--ink); }
+.chapters button[aria-current="true"] { background: var(--raise); color: var(--ink); font-weight: 600; }
+.chapters .dot { width: 10px; height: 10px; border-radius: 50%; }
+.chapters time { font: 500 13px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+
+details.tx { border-top: 1px solid var(--hair); padding-top: 12px; }
+details.tx summary { cursor: pointer; font: 600 14px/1.2 var(--body); color: var(--ink2); }
+.txb { margin-top: 12px; max-height: 340px; overflow-y: auto; display: grid; gap: 4px; padding-right: 6px; }
+.txb button { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; text-align: left; background: none; border: 0;
+  padding: 4px 6px; border-radius: 5px; color: var(--ink2); font: 400 14px/1.5 var(--body); cursor: pointer; }
+.txb button:hover { background: var(--raise); }
+.txb button.on { color: var(--ink); background: var(--raise); }
+.txb time { font: 500 12px/1.9 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.shelf { display: grid; gap: 22px; min-width: 0; }
+.shelf h3 { margin: 0 0 8px; font: 600 12px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.shelf ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.card { width: 100%; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: start; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: 8px; padding: 6px; color: var(--ink); cursor: pointer; font: inherit; }
+.card:hover { background: var(--surface); }
+.card[aria-current="true"] { background: var(--surface); border-color: var(--hair); }
+.thumb { position: relative; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 5px; overflow: hidden; background: var(--raise); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb .dur { position: absolute; right: 4px; bottom: 6px; padding: 1px 5px; border-radius: 3px; background: var(--scrim);
+  color: #eef0f4; font: 500 11px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
+.thumb .seen { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); }
+.card b { display: block; font: 600 14px/1.3 var(--body); text-wrap: balance; }
+.card small { display: block; color: var(--muted); font: 400 12.5px/1.35 var(--body); margin-top: 3px; }
+.keys { color: var(--muted); font: 400 12.5px/1.5 var(--body); margin: 0; }
+.keys kbd { font: 500 11.5px/1 var(--mono); border: 1px solid var(--hair); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; color: var(--ink2); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="kicker" id="kicker"></p>
+    <h1 id="title"></h1>
+    <p class="blurb" id="blurb"></p>
+    <div class="bar" aria-hidden="true"><i style="background:var(--sky)"></i><i style="background:var(--ember)"></i><i style="background:var(--mint)"></i><i style="background:var(--lilac)"></i><i style="background:var(--gold)"></i><i style="background:var(--rose)"></i></div>
+    <p class="meta" id="meta"></p>
+  </header>
+  <main class="layout">
+    <section class="stage" aria-label="Player">
+      <div class="frame"><video id="v" playsinline preload="metadata"></video><div class="vov" hidden></div></div>
+      <p class="meta" id="status" hidden></p>
+      <div class="now"><p class="meta" id="nowmeta"></p><h2 id="nowtitle"></h2><p class="sub" id="nowsub"></p></div>
+      <div class="tl" id="tl" role="presentation"></div>
+      <ol class="chapters" id="ch" aria-label="Chapters"></ol>
+      <details class="tx" id="tx"><summary>Transcript</summary><div class="txb" id="txb"></div></details>
+      <p class="keys"><kbd>k</kbd> play or pause · <kbd>j</kbd> <kbd>l</kbd> back or ahead 10 s · <kbd>n</kbd> <kbd>p</kbd> next or previous video · <kbd>c</kbd> captions</p>
+    </section>
+    <aside class="shelf" id="shelf" aria-label="Videos"></aside>
+  </main>
+</div>
+
+<script type="application/json" id="data">/*DATA*/</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const VIDS = D.videos || [];
+const $ = s => document.querySelector(s);
+const v = $('#v');
+const HUES = ['--sky', '--ember', '--mint', '--lilac', '--gold', '--rose'];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = s => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const KEY = 'mtk:' + (D.title || '') + ':';
+const store = {  // per-viewer conveniences only: where you left off, what you've watched
+  get(k, d) { try { const x = localStorage.getItem(KEY + k); return x == null ? d : JSON.parse(x); } catch (e) { return d; } },
+  set(k, x) { try { localStorage.setItem(KEY + k, JSON.stringify(x)); } catch (e) { } },
+};
+const KINDS = { episode: 'Episodes', problem: 'Problems' };
+const label = e => `${e.kind === 'problem' ? 'Problem' : 'Episode'} ${e.n}`;
+
+/* ---------------- video loading (the Chromium seek fix) ----------------
+   The artifact's file server ignores byte-range requests. Chromium then treats the video as unseekable
+   (video.seekable is [0, 0]) and clamps every seek to 0 before any event fires: a rewind or a jump restarts the
+   video, even into the part already buffered, and the page can't even learn where the viewer meant to go.
+   So: the video streams natively for an instant start, with its native controls hidden. As soon as its metadata
+   shows the stream is fully seekable (a server that serves ranges), the controls appear and that's it. If not,
+   the whole file downloads right away (fetch() of published files is the supported path) and the player switches
+   to that in-memory copy, which seeks anywhere, keeping position and play state; then the controls appear. Until
+   then every seek goes through jump() (chapters, timeline, transcript, keys), which waits for the copy instead of
+   letting Chromium snap to 0. If native loading fails outright (an error, or no metadata in 12 s), the copy is
+   used directly. Test hooks: ?forceblob uses the copy from the start; ?native turns the fix off. */
+const FORCE_BLOB = /forceblob/.test(location.search), NO_FIX = /native/.test(location.search);
+const blobURLs = new Map(), blobJobs = new Map();
+function freeBlobs() { blobURLs.forEach(u => URL.revokeObjectURL(u)); blobURLs.clear(); blobJobs.clear(); }
+const mediaErr = x => x.error ? `media error ${x.error.code}${x.error.message ? ': ' + x.error.message : ''}` : 'no data';
+const playBtn = document.createElement('button');
+playBtn.className = 'next'; playBtn.type = 'button'; playBtn.textContent = '▶ Play';
+playBtn.addEventListener('click', () => v.play().catch(() => {}));
+function overlay(text, button) {
+  const o = $('.vov');
+  o.hidden = text == null && !button;
+  o.textContent = text || '';
+  if (button) o.appendChild(button);
+}
+function status(text) { const st = $('#status'); st.hidden = text == null; st.textContent = text || ''; }
+function idle() {  // controls hidden and nothing to report: offer a play button
+  if (!v.controls && v.paused && !v.dataset.seekTo && v.dataset.mode !== 'failed') overlay(null, playBtn);
+}
+function ready() {  // the video can seek anywhere now: hand over to the native controls
+  v.controls = true;
+  status(null);
+  if ($('.vov').contains(playBtn)) overlay(null);
+}
+function reach(t) {  // can the browser seek to t natively?
+  const r = v.seekable;
+  for (let i = 0; i < r.length; i++) if (t >= r.start(i) - .05 && t <= r.end(i) + .05) return true;
+  return false;
+}
+const fullySeekable = () => v.duration > 1 && reach(.5) && reach(v.duration - .5);
+function blobFor(url, onPct) {
+  if (blobURLs.has(url)) return Promise.resolve(blobURLs.get(url));
+  let job = blobJobs.get(url);
+  if (!job) {
+    const listeners = new Set();
+    job = (async () => {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`download failed (HTTP ${r.status})`);
+      const total = +r.headers.get('content-length') || 0, rd = r.body && r.body.getReader();
+      let blob;
+      if (rd) {
+        const parts = []; let got = 0;
+        for (;;) {
+          const { done, value } = await rd.read();
+          if (done) break;
+          parts.push(value); got += value.length;
+          if (total) listeners.forEach(f => f(Math.round(100 * got / total)));
+        }
+        blob = new Blob(parts, { type: 'video/mp4' });
+      } else blob = new Blob([await r.arrayBuffer()], { type: 'video/mp4' });
+      const u = URL.createObjectURL(blob);
+      blobURLs.set(url, u);
+      return u;
+    })();
+    job.listeners = listeners;
+    job.catch(() => blobJobs.delete(url));
+    blobJobs.set(url, job);
+  }
+  if (onPct) job.listeners.add(onPct);
+  return job;
+}
+async function swapToBlob(url, src) {  // keep position (or a pending jump) and play state
+  if (v.dataset.want !== url || v.dataset.mode === 'blob' || v.dataset.mode === 'swapping') return;
+  const t = v.currentTime, playing = !v.paused || v.dataset.play === '1';
+  v.dataset.mode = 'swapping';
+  try {
+    await new Promise((ok, bad) => {
+      v.addEventListener('loadedmetadata', ok, { once: true });
+      v.addEventListener('error', () => bad(new Error(mediaErr(v))), { once: true });
+      v.src = src;
+    });
+  } catch (e) { v.dataset.mode = 'failed'; throw e; }
+  v.dataset.mode = 'blob';
+  const target = v.dataset.seekTo ? +v.dataset.seekTo : t;  // a jump made while loading wins
+  v.dataset.seekTo = '';
+  if (target) v.currentTime = target;
+  overlay(null);
+  ready();
+  if (playing) v.play().catch(() => {});
+}
+async function upgrade(url, why) {
+  if (NO_FIX || v.dataset.dl === url) return;
+  v.dataset.dl = url;
+  if (why) overlay('Loading video…');
+  status('Loading the full video so you can jump around…');
+  try {
+    const src = await blobFor(url, pct => {
+      if (v.dataset.want !== url) return;
+      status(`Loading the full video so you can jump around · ${pct}%`);
+      if (why || v.dataset.seekTo) overlay(`${why ? 'Loading video' : 'Loading the full video to jump there'}… ${pct}%`);
+    });
+    await swapToBlob(url, src);
+  } catch (e) {
+    v.dataset.dl = '';
+    if (v.dataset.want !== url) return;
+    status(null);
+    v.dataset.seekTo = '';
+    if (why || v.dataset.mode === 'failed') { v.dataset.mode = 'failed'; overlay(`This video can't play here (${why || 'loading failed'}; then ${e.message}).`); }
+    else { overlay(null); v.controls = true; }  // native still plays; seeking stays limited, but nothing breaks
+  }
+}
+function jump(t, play) {  // every seek the page makes: exact, even before the video can seek
+  t = Math.max(0, Math.min(t, (v.duration || (cur && cur.duration) || t) - .05));
+  if (v.dataset.mode === 'swapping' || (v.dataset.mode === 'native' && !reach(t) && !NO_FIX)) {
+    v.dataset.seekTo = String(t);  // applied when the in-memory copy arrives
+    overlay('Loading the full video to jump there…');
+    if (v.dataset.mode === 'native') upgrade(v.dataset.want);
+  } else v.currentTime = t;
+  if (play && v.paused) v.play().catch(() => {});
+}
+function wire() {
+  const failed = why => { clearTimeout(+v.dataset.timer || 0); if (v.dataset.mode === 'native') { v.dataset.dl = ''; upgrade(v.dataset.want, why); } };
+  v.addEventListener('error', () => failed(mediaErr(v)));
+  v.addEventListener('loadstart', () => {  // native loading gets 12 s to produce metadata
+    clearTimeout(+v.dataset.timer || 0);
+    if (v.dataset.mode === 'native') v.dataset.timer = setTimeout(() => { if (v.readyState < 1) failed('no data after 12 s'); }, 12000);
+  });
+  v.addEventListener('loadedmetadata', () => {
+    clearTimeout(+v.dataset.timer || 0);
+    if (v.dataset.mode !== 'native') return;
+    if (fullySeekable() || NO_FIX) ready();
+    else { upgrade(v.dataset.want); idle(); }  // unseekable stream: fetch the seekable copy now
+  });
+  v.addEventListener('play', () => {
+    v.dataset.play = '1';
+    if ($('.vov').contains(playBtn)) overlay(null);
+  });
+  v.addEventListener('pause', () => { if (v.dataset.mode !== 'swapping') { v.dataset.play = ''; idle(); } });
+  v.addEventListener('click', () => { if (!v.controls) v.paused ? v.play().catch(() => {}) : v.pause(); });
+}
+function setVideo(url) {
+  clearTimeout(+v.dataset.timer || 0);
+  v.dataset.want = url; v.dataset.play = ''; v.dataset.seekTo = ''; v.dataset.dl = '';
+  overlay(null); status(null);
+  v.controls = false;
+  v.dataset.mode = 'native';
+  if (FORCE_BLOB) upgrade(url, 'forced');
+  else v.src = url;
+}
+
+/* ---------------- page ---------------- */
+let cur = null, cues = null, lastSave = 0;
+function seek(t) { jump(t, true); }
+
+function renderShelf() {
+  const kinds = [...new Set(VIDS.map(e => e.kind))];
+  $('#shelf').innerHTML = kinds.map(k => `<section><h3>${esc(KINDS[k] || k)}</h3><ul>${VIDS.filter(e => e.kind === k).map(e => {
+    const seen = Math.min(1, store.get('seen:' + e.stem, 0));
+    return `<li><button class="card" type="button" data-stem="${esc(e.stem)}"${cur && cur.stem === e.stem ? ' aria-current="true"' : ''}>
+      <span class="thumb">${e.poster ? `<img src="${esc(e.poster)}" alt="" loading="lazy">` : ''}<span class="dur">${fmt(e.duration)}</span>
+      <span class="seen" style="width:${(seen * 100).toFixed(1)}%"></span></span>
+      <span><b>${esc(label(e))} · ${esc(e.title)}</b>${e.sub ? `<small>${esc(e.sub)}</small>` : ''}</span></button></li>`;
+  }).join('')}</ul></section>`).join('');
+}
+
+function renderChapters(e) {
+  const ch = e.chapters || [];
+  const T = e.duration || 1;
+  $('#tl').innerHTML = ch.map((c, i) => {
+    const end = i + 1 < ch.length ? ch[i + 1].t : T;
+    return `<span data-i="${i}" style="flex:${Math.max(.001, end - c.t)} 1 0;background:var(${HUES[i % HUES.length]})" title="${esc(c.label)}"></span>`;
+  }).join('') + '<i class="head" id="head"></i>';
+  $('#ch').innerHTML = ch.map((c, i) => `<li><button type="button" data-t="${c.t}"><span class="dot" style="background:var(${HUES[i % HUES.length]})"></span><time>${fmt(c.t)}</time><span>${esc(c.label)}</span></button></li>`).join('');
+}
+
+const capTrack = v.addTextTrack('captions', 'English', 'en');  // one track, refilled per video (cues are embedded)
+function setCaptions(e) {
+  const keep = capTrack.mode;
+  capTrack.mode = 'hidden';  // cues are only reachable while the track isn't disabled
+  while (capTrack.cues && capTrack.cues.length) capTrack.removeCue(capTrack.cues[0]);
+  (e.cues || []).forEach(([a, b, text]) => capTrack.addCue(new VTTCue(a, b, text)));
+  capTrack.mode = keep === 'showing' ? 'showing' : 'hidden';
+}
+function loadTranscript() {
+  if (!cur) return;
+  cues = (cur.cues || []).map(([a, b, text]) => ({ a, b, text }));
+  $('#txb').innerHTML = cues.length ? cues.map((c, i) => `<button type="button" data-i="${i}"><time>${fmt(c.a)}</time><span>${esc(c.text)}</span></button>`).join('')
+    : 'No transcript for this video.';
+}
+
+function open(stem, t, play) {
+  const e = VIDS.find(x => x.stem === stem) || VIDS[0];
+  if (!e) { $('#nowtitle').textContent = 'No videos yet'; return; }
+  const same = cur && cur.stem === e.stem;
+  cur = e;
+  store.set('last', e.stem);
+  if (!same) {
+    freeBlobs();
+    cues = null;
+    $('#txb').innerHTML = '';
+    v.poster = e.poster || '';
+    setCaptions(e);
+    setVideo(e.file);
+    $('#nowmeta').textContent = `${label(e)} · ${fmt(e.duration)}`;
+    $('#nowtitle').textContent = e.title;
+    $('#nowsub').textContent = e.sub || '';
+    $('#nowsub').hidden = !e.sub;
+    renderChapters(e);
+    if ($('#tx').open) loadTranscript();
+  }
+  const saved = store.get('pos:' + e.stem, 0);
+  const resume = t == null && !same && saved > 5 && saved < (e.duration || 0) - 10 ? saved : null;
+  if (t != null) {  // an explicit time (chapter link, #ep02.83): go there now
+    if (v.readyState >= 1) jump(t, play);
+    else v.addEventListener('loadedmetadata', () => jump(t, play), { once: true });
+  } else if (resume != null) {  // where this viewer left off: applied on play, so opening the page downloads nothing
+    $('#nowmeta').textContent += ` · resumes at ${fmt(resume)}`;
+    v.addEventListener('play', () => { if (v.dataset.want === e.file && v.currentTime < 1) jump(resume); }, { once: true });
+    if (play) v.play().catch(() => {});
+  } else if (play) v.play().catch(() => {});
+  renderShelf();
+  try { history.replaceState(null, '', '#' + e.stem); } catch (err) { }
+}
+
+function tick() {
+  if (!cur) return;
+  const t = v.currentTime, T = cur.duration || v.duration || 1;
+  const head = $('#head');
+  if (head) head.style.left = `calc(${(100 * t / T).toFixed(3)}% - 1px)`;
+  const ch = cur.chapters || [];
+  let k = -1;
+  ch.forEach((c, i) => { if (c.t <= t + .05) k = i; });
+  document.querySelectorAll('#ch button').forEach((b, i) => b.setAttribute('aria-current', String(i === k)));
+  document.querySelectorAll('#tl span').forEach((s, i) => s.classList.toggle('on', i === k));
+  if (cues && $('#tx').open) {
+    document.querySelectorAll('#txb button').forEach((b, i) => b.classList.toggle('on', cues[i].a <= t && t < cues[i].b));
+  }
+  if (Date.now() - lastSave > 2000 && !v.seeking) {
+    lastSave = Date.now();
+    store.set('pos:' + cur.stem, t);
+    store.set('seen:' + cur.stem, Math.max(store.get('seen:' + cur.stem, 0), t / T));
+  }
+}
+
+function neighbor(step) {
+  const same = VIDS.filter(e => e.kind === cur.kind);
+  return same[same.indexOf(cur) + step];
+}
+
+v.addEventListener('timeupdate', tick);
+v.addEventListener('seeked', tick);
+v.addEventListener('ended', () => {
+  store.set('pos:' + cur.stem, 0);
+  store.set('seen:' + cur.stem, 1);
+  renderShelf();
+  const nx = neighbor(1);
+  if (!nx) return;
+  const b = document.createElement('button');
+  b.className = 'next'; b.type = 'button';
+  b.textContent = `Next: ${label(nx)} · ${nx.title}`;
+  b.addEventListener('click', () => open(nx.stem, 0, true));
+  overlay(null, b);
+});
+$('#shelf').addEventListener('click', ev => { const b = ev.target.closest('.card'); if (b) open(b.dataset.stem, null, true); });
+$('#ch').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) seek(+b.dataset.t); });
+$('#tl').addEventListener('click', ev => {
+  const r = ev.currentTarget.getBoundingClientRect();
+  seek((ev.clientX - r.left) / r.width * (cur.duration || v.duration || 0));
+});
+$('#txb').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b && cues) seek(cues[+b.dataset.i].a); });
+$('#tx').addEventListener('toggle', () => { if ($('#tx').open) loadTranscript(); });
+document.addEventListener('keydown', ev => {
+  if (ev.metaKey || ev.ctrlKey || ev.altKey || /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName) || !cur) return;
+  const k = ev.key.toLowerCase();
+  if (k === 'k') { v.paused ? v.play().catch(() => {}) : v.pause(); }
+  else if (k === 'j') seek(v.currentTime - 10);
+  else if (k === 'l') seek(v.currentTime + 10);
+  else if (k === 'n' || k === 'p') { const nx = neighbor(k === 'n' ? 1 : -1); if (nx) open(nx.stem, 0, true); }
+  else if (k === 'c') capTrack.mode = capTrack.mode === 'showing' ? 'hidden' : 'showing';
+  else return;
+  ev.preventDefault();
+});
+function fromHash() {  // #ep02 opens episode 2; #ep02.83 opens it at 1:23
+  const m = location.hash.match(/^#([a-z]+\d+)(?:\.(\d+))?$/i);
+  if (m && VIDS.some(e => e.stem === m[1])) { open(m[1], m[2] ? +m[2] : null, false); return true; }
+  return false;
+}
+window.addEventListener('hashchange', fromHash);
+
+$('#kicker').textContent = D.kicker || '';
+$('#kicker').hidden = !D.kicker;
+$('#title').textContent = D.heading || D.title || '';
+$('#blurb').textContent = D.blurb || '';
+$('#blurb').hidden = !D.blurb;
+const mins = VIDS.reduce((a, e) => a + (e.duration || 0), 0) / 60;
+const count = k => VIDS.filter(e => e.kind === k).length;
+$('#meta').textContent = [count('episode') && `${count('episode')} episode${count('episode') > 1 ? 's' : ''}`,
+  count('problem') && `${count('problem')} problem walkthrough${count('problem') > 1 ? 's' : ''}`,
+  `${Math.round(mins)} min`].filter(Boolean).join(' · ');
+wire();
+if (!fromHash()) open(store.get('last', VIDS[0] && VIDS[0].stem), null, false);
+</script>

@@ -145,7 +145,17 @@ waves of ~10 to stay clear of usage limits.
 narration) and prints a chapter list (keep it for the problem set and the summary) and every silence over 3 s
 (each must be deliberate). For a series, a site or an artifact page: `mtk episodes BRIEF.md` builds per episode (or
 per problem) `out/<stem>.mp4`, a web copy under the artifact's 15 MB per-file cap (`--mb-per-min` for a site-wide
-budget), a poster, captions and `web/episodes.json` (titles, durations, chapters) for the page to read. Storyboards show beat
+budget), a poster, captions and `web/episodes.json` (titles, durations, chapters) for the page to read.
+
+**A website around the videos**: `mtk site --kicker "<course>" --blurb "<one or two sentences>" --out <a folder in
+your scratchpad>` (after `mtk episodes`) writes `index.html` (a study page: player, chapter timeline and list,
+captions and a clickable transcript built in, resume where you left off, episode and problem shelves, keys
+j k l n p c) next to copies of the videos, and prints the publish plan: Artifact publish with `file_path` that
+`index.html` and `files` = batch 1, then each later batch to the same url (64 MB per publish, 15 MB per file). Its
+player is the one to use for any video page: Chromium can't seek videos served without byte ranges (the artifact
+file server), and the player works around it (it fetches the full file and switches to it, with every seek waiting
+for it instead of snapping to 0). Test it locally with `python3 <repo>/tests/serve.py <folder> 8765 --kbps 800`
+(no range support, like the artifact server; add `--ranges` for a normal host). Storyboards show beat
 ends; check motion and full resolution with one image: `mtk frames out/<name>.mp4 <4-6 seconds mid-animation in
 the busiest scenes>`, then Read it.
 
@@ -170,6 +180,6 @@ render so its timestamps match.
 
 ## 8. Deliver
 
-Tell the user the video path and length, the chapter list, the problem-set PDF path, and the timestamp of the
-mind-blow moment if there is one (or one line on why none fit). Share the files (SendUserFile if available).
+Tell the user the video path and length, the chapter list, the problem-set PDF path, the site's link if you
+published one, and the timestamp of the mind-blow moment if there is one (or one line on why none fit). Share the files (SendUserFile if available).
 Say plainly anything that isn't right yet.

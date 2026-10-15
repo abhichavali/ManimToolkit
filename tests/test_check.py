@@ -49,3 +49,26 @@ os.chdir(b.parent)
 cues = vtt([(10.0, "v1", "S01_A")], b.parent / "x.vtt").read_text()
 assert "00:00:11.000 --> 00:00:12.143\nOne two." in cues and "--> 00:00:15.000\nThree four five six." in cues, cues
 print("episodes ok")
+
+# site: page data (cues embedded, title split at the colon), copies, publish plan, player script parses
+import json, re, shutil
+w = b.parent / "proj"
+(w / "web").mkdir(parents=True, exist_ok=True)
+(w / "web/ep01.mp4").write_bytes(b"\0" * 1000)
+(w / "web/ep01.jpg").write_bytes(b"\0" * 10)
+(w / "web/ep01.vtt").write_text("WEBVTT\n\n00:00:01.000 --> 00:00:02.500\nOne two.\n")
+(w / "web/episodes.json").write_text(json.dumps([dict(stem="ep01", kind="episode", n=1, title="A", sub="", file="ep01.mp4",
+    poster="ep01.jpg", captions="ep01.vtt", duration=2.5, mb=0.0, chapters=[{"t": 0, "label": "Hook", "scene": "S01"}])]))
+pub = b.parent / "pub"
+out = subprocess.run(["mtk", "site", "--title", "Series Name: a subtitle", "--out", str(pub)], cwd=w,
+                     capture_output=True, text=True).stdout
+page = (pub / "index.html").read_text()
+data = json.loads(re.search(r'id="data">(.*?)</script>', page, re.S).group(1).replace("<\\/", "</"))
+assert "<title>Series Name</title>" in page and data["heading"] == "Series Name: a subtitle", data["heading"]
+assert data["videos"][0]["cues"] == [[1.0, 2.5, "One two."]] and "captions" not in data["videos"][0], data["videos"][0]
+assert (pub / "ep01.mp4").exists() and (pub / "ep01.jpg").exists() and not (pub / "ep01.vtt").exists()
+assert 'batch 1: {"ep01.mp4"' in out, out
+if shutil.which("node"):
+    js = page.split('<script>')[-1].split('</script>')[0]
+    subprocess.run(["node", "-e", "new Function(require('fs').readFileSync(0, 'utf8'))"], input=js, text=True, check=True)
+print("site ok")

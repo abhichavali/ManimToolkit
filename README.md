@@ -15,9 +15,10 @@ tokens and wall-clock time the old `manim-explainer` skill spent, without changi
 | `mtk/kit.py` | Pieces past videos kept rewriting: `E` (concept-colored math), `morph`, cards, MC choices, write-up sheets, `ArrayRow`, `CodeBlock`, `GraphMob`, `rec_tree` |
 | `mtk/view3d.py` | Fast fake 3D: `SurfaceImage` (shaded surfaces) and `Cloud` (point clouds) as numpy rasters |
 | `mtk/pde.py`, `mtk/recipes.py` | PDE kit and the recipe gallery (26: R01-R14, P01-P11, W01) |
-| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `check`, `render`, `episodes`, `frames`, `recipe` |
+| `mtk/site/player.html` | The study-page template `mtk site` fills: player, chapters, captions, transcript, shelves |
+| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `check`, `render`, `episodes`, `site`, `frames`, `recipe` |
 | `plugin/` | The skill: `SKILL.md` (coordinator), `API.md` (the one page scene writers read), problem-set and mind-blow docs |
-| `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards build (offline voice, no API cost) |
+| `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards, briefs, captions and the site build (offline voice, no API cost); `tests/serve.py`: a local server without range support, like the artifact file server |
 
 Scene files start `from mtk import *`; nothing is copied into projects any more.
 
@@ -96,3 +97,27 @@ Past series kept rebuilding the same things by hand: `episodes.py` was written 7
   lints for unnarrated stretches and for animation that overruns its narration (it caught an 8 s silent stretch
   from a race agent who passed `1.0` meaning one second to `beat()`); `mtk voice` lints the brief's shape;
   `mtk brief` hands every agent the shared kits' docstrings; `mtk new` scaffolds a brief in the exact format.
+
+## Websites around the videos, with seeking that works on Chromium
+
+`mtk site` (after `mtk episodes`) writes `index.html`, a study page: the player, a chapter timeline in the video's
+concept colors, a chapter list, captions and a clickable transcript (both embedded, since the artifact server won't
+serve `.vtt`), resume where you left off, episode and problem shelves, and the keys j k l n p c. It also prints an
+artifact publish plan, with files batched under the 64 MB per-publish limit.
+
+Seeking is the hard part. A server that ignores HTTP Range requests (the claude.ai artifact file server, and
+`python3 tests/serve.py`) makes Chromium report the video as unseekable (`video.seekable` is `[0, 0]`). Chromium
+then clamps every seek to 0 *before* any event fires: a rewind restarts the video, even into the part already
+buffered, and the page can't learn where the viewer meant to go. The networking site's earlier fix only caught seeks
+outside the buffer, which is why rewinding still failed sometimes. The player now:
+
+- keeps the native controls hidden until the video is actually seekable (immediately on a server with ranges);
+- otherwise downloads the whole file as soon as the stream proves unseekable, and switches to the in-memory copy,
+  keeping position and play state;
+- routes every seek the page makes (chapters, timeline, transcript, keys, resume, `#ep01.83` links) through one
+  `jump()`, which waits for the copy instead of letting Chromium snap to 0.
+
+Checked in the desktop app's Chromium pane against `tests/serve.py` at 800 KB/s. With the fix off: `seekable`
+`[0, 0]`, and jumps to 100 s and rewinds to 20 s both restarted at 0. With it on: chapter jumps made during the
+download landed on the latest one once the copy arrived (9.6 s); native rewinds and the keys worked after that. On
+a server with range support, controls showed at once, every seek was native, and nothing extra downloaded.

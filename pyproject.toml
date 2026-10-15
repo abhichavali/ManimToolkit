@@ -15,3 +15,6 @@ mtk = "mtk_cli:main"
 [tool.setuptools]
 packages = ["mtk"]
 py-modules = ["mtk_cli"]
+
+[tool.setuptools.package-data]
+mtk = ["site/*.html"]

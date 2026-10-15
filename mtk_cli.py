@@ -8,6 +8,9 @@
   mtk brief  BRIEF.md S03|p02              what an agent needs: shared part + kit docstrings, its scene (or problem)
   mtk episodes BRIEF.md [ep03 p02 ..]      after render: per episode (or problem) out/<stem>.mp4, web/<stem>.mp4
                                            under the artifact's 15 MB cap, poster .jpg, captions .vtt, web/episodes.json
+  mtk site [--title T] [--blurb B] [--out DIR]   after episodes: web/index.html, a study page around the videos
+                                           (chapters, captions + transcript built in, resume, Chromium-safe seeking)
+                                           plus the artifact publish plan (file maps in batches under 64 MB)
   mtk new SLUG [--walk]                    ~/Movies/Explainers/SLUG with a BRIEF.md skeleton (series or walkthroughs)
   mtk frames VIDEO SEC [SEC..]             one captioned sheet of full-quality frames, for spot checks
   mtk recipe [NAME]                        list the recipe gallery, or print one recipe's source
@@ -507,6 +510,63 @@ def episodes(a):
     print(f"{mpath}: {len(man)} videos, {sum(e['duration'] for e in man.values()) / 60:.1f} min")
 
 
+def _cues(text):
+    """[[start s, end s, text], ...] from WebVTT."""
+    secs = lambda x: sum(float(p) * 60 ** i for i, p in enumerate(reversed(x.strip().split(":"))))
+    out = []
+    for block in re.split(r"\n\s*\n", text.replace("\r", "")):
+        ls = block.split("\n")
+        i = next((k for k, x in enumerate(ls) if "-->" in x), None)
+        if i is not None:
+            a, b = ls[i].split("-->")
+            out.append([round(secs(a), 3), round(secs(b.split()[0]), 3), " ".join(ls[i + 1:]).strip()])
+    return out
+
+
+def site(a):
+    import html as _html
+    web = Path("web")
+    if not (web / "episodes.json").exists():
+        sys.exit("no web/episodes.json here: run mtk episodes first")
+    vids = json.loads((web / "episodes.json").read_text())
+    for e in vids:  # captions travel inside the page: artifacts don't serve .vtt, and it saves a request
+        f = web / (e.get("captions") or "")
+        e["cues"] = _cues(f.read_text()) if e.get("captions") and f.exists() else []
+        e.pop("captions", None)
+    heading = a.title
+    if not heading and Path("BRIEF.md").exists():
+        first = next((ln for ln in Path("BRIEF.md").read_text().splitlines() if re.match(r"^#\s+\S", ln)), "# ")
+        heading = re.sub(r"\s*\(~?[\d.]+\s*min\)\s*$", "", first[1:].strip())
+    heading = heading or Path.cwd().name
+    name = heading.partition(":")[0]  # the page's name (its tab and gallery title) stops before an explainer colon
+    data = dict(title=name.strip(), heading=heading, kicker=a.kicker or "", blurb=a.blurb or "", videos=vids)
+    tpl = (Path(importlib.util.find_spec("mtk").origin).parent / "site" / "player.html").read_text()
+    page = tpl.replace("{{TITLE}}", _html.escape(name.strip())).replace(
+        "/*DATA*/", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
+    out = Path(a.out).expanduser() if a.out else web
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "index.html").write_text(page)
+    files = [e[k] for e in vids for k in ("file", "poster") if e.get(k)]
+    for f in files:  # a separate publish folder (e.g. the scratchpad) gets its own copies
+        src, dst = web / f, out / f
+        if src.resolve() != dst.resolve() and (not dst.exists() or dst.stat().st_mtime < src.stat().st_mtime):
+            shutil.copy2(src, dst)
+    print(f"{(out / 'index.html').resolve()}  ({len(vids)} videos, {sum((out / f).stat().st_size for f in files) / 1e6:.1f} MB)")
+    batches, cur, size = [], {}, 0
+    for f in files:  # one publish carries at most 64 MB: batch the files, all published to the same artifact
+        b = (out / f).stat().st_size
+        if cur and size + b > 60e6:
+            batches.append(cur)
+            cur, size = {}, 0
+        cur[f] = str((out / f).resolve())
+        size += b
+    batches.append(cur)
+    print("publish: Artifact file_path=index.html (in that folder) with files=<batch 1>; later batches go to the "
+          "same url with the same file_path")
+    for i, bt in enumerate(batches, 1):
+        print(f"batch {i}: " + json.dumps(bt))
+
+
 SERIES = """# <Title>  (~N min)
 
 **Hook**: <the concrete question or picture of the first 20 s>. **Insight**: <the one sentence the viewer keeps>.
@@ -645,6 +705,12 @@ def main():
     c.add_argument("--max-mb", type=float, default=14.5, help="per-file cap (artifact files max out at 15 MB)")
     c.add_argument("--mb-per-min", type=float, help="also cap at this many MB per minute (a site-wide budget)")
     c.set_defaults(fn=episodes)
+    c = sub.add_parser("site")
+    c.add_argument("--title", help="the page heading (default: the brief's title); its tab name stops at a colon")
+    c.add_argument("--kicker", help="small line above the title, e.g. the course")
+    c.add_argument("--blurb", help="one or two sentences under the title")
+    c.add_argument("--out", help="write index.html and copies of the videos here (default: web/)")
+    c.set_defaults(fn=site)
     c = sub.add_parser("new")
     c.add_argument("slug")
     c.add_argument("--walk", action="store_true", help="exam walkthrough brief instead of a series")
