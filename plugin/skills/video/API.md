@@ -66,7 +66,8 @@ class S03_Remainder(VScene):      # S## names, rendered in sorted order; 30-120 
 - `key_box(*lines, label="KEY IDEA")` end-of-section summary; lines are TeX strings or mobjects (`E(...)` keeps colors) · `qcard(tag, *mobs)` question card
 - `sheet(head, [(label, color, [mobs]), ...])` worked write-up rows (`.rows[k]`, `.head`), already placed
 - `chip(name, color)` tag · `badge(n)` numbered circle · `choices([tex, ...])` A-D rows + `mark(row, good)` -> anims
-- `glow(m, color)` soft halo for a reveal, text or shapes (FadeIn it under m) · `strike(m)` line through · `Cross(m)` (manim) X over
+- `glow(m, color)` soft halo that marks one reveal (the answer, the key term, `eq[2]`): `FadeIn(glow(m))`. It
+  sits behind m (raises m's z_index) so glyphs stay sharp; don't hand-roll halos · `strike(m)` line through · `Cross(m)` (manim) X over
 - `span(a, b, label, side=DOWN)` dimension marker · frame is 14.2 x 8, header at top-left
 
 **Worked problems** (walkthroughs): `self.try_it()` the "Try it before we solve it" pause · `answer_box(m)` ·

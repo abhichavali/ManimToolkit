@@ -156,14 +156,18 @@ def key_box(*lines, width=11, color=ACCENT, label="KEY IDEA"):
     return VGroup(box, inner.move_to(box))
 
 
-def glow(m, color=None, layers=8, width=24, opacity=0.6):
-    """Soft halo behind m: stacked stroke copies, so the core is brightest. FadeIn(glow(eq)) under a reveal."""
+def glow(m, color=None, layers=8, width=24, opacity=0.35):
+    """Soft halo behind m (text, equations, parts of them, shapes): stacked stroke copies, so the core is brightest.
+    FadeIn(glow(eq)) under a reveal. Raises m's z_index by 1 so the halo sits under it whatever the add order:
+    a halo drawn over glyphs tints and smears them."""
     color = color or m.get_color()
+    z = max(x.z_index for x in m.get_family())
     g = VGroup(*[m.copy().set_fill(opacity=0).set_stroke(color, width=width * i / layers, opacity=opacity / layers)
                  for i in range(layers, 0, -1)])
     for x in g.family_members_with_points():
         x.joint_type = LineJointType.ROUND  # miter joints spike out of glyph corners
-    return g
+    m.set_z_index(z + 1)
+    return g.set_z_index(z)  # same z as m's surroundings, added after them: above a card's fill, below m
 
 
 # layout slots (center, width, height) in the 14.2 x 8 frame, clear of the section header
