@@ -7,7 +7,7 @@ here = Path(__file__).parent
 out = subprocess.run(["mtk", "check", "lint_cases.py"], cwd=here, capture_output=True, text=True,
                      env={**os.environ, "MTK_TTS": "say"}).stdout
 print(out)
-for want in ["DRIFT q: SKY in S06; EMBER in S07", "past its narration", "S08_Overrun", "lint_cases S05_Zoom", "'buried label' is hidden under a Square", "'x^2' overlaps 'y^2'", "'off the edge' is cut off",
+for want in ["0 warnings 1 checkpoints", "DRIFT q: SKY in S06; EMBER in S07", "past its narration", "S08_Overrun", "lint_cases S05_Zoom", "'buried label' is hidden under a Square", "'x^2' overlaps 'y^2'", "'off the edge' is cut off",
              "'tiny' renders at font size 12", "picture frozen for", "narration contains =", "budget 20",
              "S04_Clean", "media/board/lint_cases.S04_Clean.png"]:
     assert want in out, want
@@ -72,3 +72,48 @@ if shutil.which("node"):
     js = page.split('<script>')[-1].split('</script>')[0]
     subprocess.run(["node", "-e", "new Function(require('fs').readFileSync(0, 'utf8'))"], input=js, text=True, check=True)
 print("site ok")
+
+
+# guide: checkpoint times survive render -> episodes; mtk guide compiles and crops; mtk site embeds both
+g = b.parent / "guided"
+(g / "web").mkdir(parents=True, exist_ok=True)
+(g / "v1.py").write_text('''from mtk import *
+
+
+class S01_A(VScene):
+    def construct(self):
+        self.beat("First scene.", FadeIn(Square()))
+        self.wipe()
+
+
+class S02_B(VScene):
+    def construct(self):
+        self.beat("Your turn.", FadeIn(Circle()))
+        self.checkpoint("1.1", "Find the radius")
+        self.beat("It is one.", Indicate(Circle()))
+        self.wipe()
+''')
+(g / "BRIEF.md").write_text("# Guided\n\n## S01_A [2]\n## S02_B [5]\n")
+(g / "guide.tex").write_text(r"""\documentclass{article}\usepackage{mtkguide}\begin{document}
+\checkpoint{1.1}{Radius}{What is the radius of the circle?}
+\solutionfor{1.1}{Radius} One.
+\end{document}
+""")
+env = {**os.environ, "MTK_TTS": "say"}
+r = subprocess.run(["mtk", "render", "-q", "l"], cwd=g, capture_output=True, text=True, env=env)
+assert "checkpoint 1.1: Find the radius" in r.stdout, r.stdout + r.stderr
+subprocess.run(["mtk", "episodes", "BRIEF.md", "-q", "l"], cwd=g, capture_output=True, text=True, check=True)
+ep = json.loads((g / "web/episodes.json").read_text())[0]
+cp = ep["checkpoints"][0]
+assert cp["id"] == "1.1" and cp["t"] > ep["chapters"][1]["t"] and cp["scene"] == "S02_B", ep
+out = subprocess.run(["mtk", "guide"], cwd=g, capture_output=True, text=True).stdout
+assert "GUIDE" not in out and "1 checkpoints cropped" in out, out
+gj = json.loads((g / "web/guide.json").read_text())
+from PIL import Image
+crop = Image.open(g / "web" / gj["checkpoints"]["1.1"]["img"])
+assert gj["checkpoints"]["1.1"]["page"] == 1 and 20 < crop.height < 400, (gj, crop.size)
+subprocess.run(["mtk", "site"], cwd=g, capture_output=True, text=True, check=True)
+page = (g / "web/index.html").read_text()
+data = json.loads(re.search(r'id="data">(.*?)</script>', page, re.S).group(1).replace("<\\/", "</"))
+assert data["guide"]["checkpoints"]["1.1"]["img"] == "cp-1.1.png" and data["videos"][0]["checkpoints"][0]["id"] == "1.1"
+print("guide ok")

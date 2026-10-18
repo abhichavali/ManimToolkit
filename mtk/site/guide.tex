@@ -1,0 +1,44 @@
+% The study guide for this video: a compact handout the viewer works while the video pauses.
+% Build: `mtk guide` (after `mtk episodes`, so every checkpoint shows its time in the video).
+% Rules: plugin guide.md. Checkpoint ids match the video's self.checkpoint("1.2", ...) calls exactly.
+\documentclass[11pt]{article}
+\usepackage[margin=0.9in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{mtkguide}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.4em}
+
+\begin{document}
+{\LARGE\bfseries TITLE}\par
+{\color{mtkmuted} A guide to work through with the video}\par\medskip
+
+\textbf{How to use it.} The video pauses at each checkpoint. Work it here, on paper or a tablet, before you
+press play: the video then shows the answer, so you find out right away how you did. Stuck for five minutes? Read
+its hint on page~\pageref{hints}. Full solutions start on page~\pageref{solutions}.
+
+\section*{Episode 1: TITLE}
+
+\checkpoint{1.1}{SHORT TITLE}{%
+ONE CLEAR TASK, DOABLE WITH ONLY WHAT THE VIDEO HAS SHOWN SO FAR.}
+
+\checkpoint[4cm]{1.2}{SHORT TITLE}{%
+ONE CLEAR TASK.}
+
+\section*{After the video}
+\begin{enumerate}
+  \item OPTIONAL: A PROBLEM THAT USES THE WHOLE IDEA.
+\end{enumerate}
+
+\clearpage
+\section*{Hints}\label{hints}
+\hintfor{1.1} A NUDGE: POINT AT THE IDEA, DON'T DO THE STEP.
+\hintfor{1.2} A NUDGE.
+
+\clearpage
+\section*{Solutions}\label{solutions}
+\solutionfor{1.1}{SHORT TITLE}
+WHY THIS APPROACH. THE WORK. A CHECK (PLUG BACK IN, A LIMITING CASE, A NUMBER).
+\solutionfor{1.2}{SHORT TITLE}
+WHY. WORK. CHECK.
+\end{document}

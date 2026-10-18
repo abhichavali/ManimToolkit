@@ -465,13 +465,21 @@ class Narrated:
                 seen.setdefault(tex, []).append(col)
             (Path(SNAP) / "palette.json").write_text(json.dumps({
                 "concepts": sorted(COLORS), "tokens": {k: max(set(v), key=v.count) for k, v in seen.items()}}))
-        elif getattr(self, "_subs", None) and config.input_file:  # captions: mtk render / mtk episodes -> .vtt
+        elif config.input_file:  # a render: captions and checkpoint times for mtk episodes
             d = Path(config.media_dir) / "subs"
             d.mkdir(parents=True, exist_ok=True)
-            (d / f"{Path(config.input_file).stem}.{type(self).__name__}.json").write_text(json.dumps(self._subs))
+            stem = d / f"{Path(config.input_file).stem}.{type(self).__name__}"
+            if getattr(self, "_subs", None):
+                stem.with_name(stem.name + ".json").write_text(json.dumps(self._subs))
+            mk = stem.with_name(stem.name + ".marks.json")
+            if getattr(self, "_marks", None):
+                mk.write_text(json.dumps(self._marks))
+            elif mk.exists():
+                mk.unlink()  # its checkpoints were taken out since the last render
         b = f"/{self.budget}" if self.budget else ""
+        k = len(getattr(self, "_marks", []))
         print(f"REPORT {type(self).__name__} {self.time:.1f}s {words}w{b} {beats} beats "
-              f"{getattr(self, '_nwarn', 0)} warnings", flush=True)
+              f"{getattr(self, '_nwarn', 0)} warnings" + (f" {k} checkpoints" if k else ""), flush=True)
 
     @contextmanager
     def say(self, text, style=None):
@@ -577,6 +585,32 @@ class Narrated:
         self.play(FadeOut(card), run_time=0.4)
         self.lint_on = True
         self._said_until = self.time  # the countdown is a deliberate silence
+
+    def checkpoint(self, id, prompt, seconds=2.0):
+        """'Your turn' card for checkpoint `id` of the PDF guide; the study site (mtk site) pauses the video here
+        until the viewer has worked it. Place it right after the cue beat ("pause and do checkpoint 1.2 in your
+        guide") and right before the beat that reveals the answer. prompt: one short line of words (no TeX)."""
+        lab = T(f"YOUR TURN · CHECKPOINT {id}", 24, GOLD, weight=BOLD)
+        q = T(prompt, 32, INK, line_spacing=1.2)
+        if q.width > 11:
+            q.scale_to_fit_width(11)
+        g = VGroup(lab, q, T("Work it in your guide, then press play.", 24, INK2)).arrange(DOWN, buff=0.35)
+        box = SurroundingRectangle(g, buff=0.45, corner_radius=0.2, color=GOLD, stroke_width=2,
+                                   fill_color=SURFACE, fill_opacity=1)
+        card = Group(FullScreenRectangle(stroke_width=0, fill_color=BG, fill_opacity=0.85), box, g)
+        card.set_z_index(100)
+        c, w, _ = self._frame()
+        card.scale(w / config.frame_width).move_to(c)
+        if isinstance(self, ThreeDScene):
+            self.add_fixed_in_frame_mobjects(card)
+        self.lint_on = False  # the card covers the scene on purpose
+        self.play(FadeIn(card, scale=0.95), run_time=0.5)
+        self.__dict__.setdefault("_marks", []).append({"id": str(id), "t": round(self.time, 3), "prompt": prompt})
+        self.snap(f"checkpoint {id}: {prompt}")
+        self.wait(seconds)
+        self.play(FadeOut(card), run_time=0.4)
+        self.lint_on = True
+        self._said_until = self.time  # a deliberate pause, not a quiet stretch
 
     def try_it(self, seconds=2.5):
         """The walkthrough pause: 'Try it before we solve it.'"""

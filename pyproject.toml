@@ -17,4 +17,4 @@ packages = ["mtk"]
 py-modules = ["mtk_cli"]
 
 [tool.setuptools.package-data]
-mtk = ["site/*.html"]
+mtk = ["site/*.html", "site/*.sty", "site/*.tex"]

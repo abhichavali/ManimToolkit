@@ -11,6 +11,8 @@
   mtk site [--title T] [--blurb B] [--out DIR]   after episodes: web/index.html, a study page around the videos
                                            (chapters, captions + transcript built in, resume, Chromium-safe seeking)
                                            plus the artifact publish plan (file maps in batches under 64 MB)
+  mtk guide [guide.tex]                    after episodes: compile the study guide with each checkpoint's video time,
+                                           crop every checkpoint for the site (web/guide.pdf, web/cp-*.png, guide.json)
   mtk new SLUG [--walk]                    ~/Movies/Explainers/SLUG with a BRIEF.md skeleton (series or walkthroughs)
   mtk frames VIDEO SEC [SEC..]             one captioned sheet of full-quality frames, for spot checks
   mtk recipe [NAME]                        list the recipe gallery, or print one recipe's source
@@ -381,6 +383,16 @@ def join(pairs, vids, out):
     return chapters
 
 
+def checkpoints(chapters):
+    """Guide checkpoints logged at render (Narrated.checkpoint), on the joined video's clock."""
+    out = []
+    for t0, stem, s in chapters:
+        f = Path("media/subs") / f"{stem}.{s}.marks.json"
+        for m in json.loads(f.read_text()) if f.exists() else []:
+            out.append({"id": m["id"], "t": round(t0 + m["t"], 2), "prompt": m["prompt"], "scene": s})
+    return out
+
+
 def vtt(chapters, path):
     """WebVTT from media/subs/<file>.<Scene>.json (say() logs every line during a render), offset per chapter.
     Lines become one cue per sentence, timed in proportion to length. Returns the path, or None without subs."""
@@ -427,6 +439,8 @@ def render(a):
     print(f"{out.resolve()}  {dur(out):.1f}s" + (f"  captions: {cap}" if cap.exists() else "") + "\nchapters:")
     for t, stem, s in chapters:
         print(f"  {int(t // 60)}:{int(t % 60):02d}  {stem} {s}")
+    for c in checkpoints(chapters):
+        print(f"  {int(c['t'] // 60)}:{int(c['t'] % 60):02d}  checkpoint {c['id']}: {c['prompt']}")
     sil = subprocess.run(["ffmpeg", "-nostdin", "-i", str(out), "-vn", "-af", "silencedetect=noise=-45dB:d=3", "-f",
                           "null", "-"], capture_output=True, text=True).stderr
     for m in re.finditer(r"silence_end: ([\d.]+) \| silence_duration: ([\d.]+)", sil):
@@ -501,13 +515,78 @@ def episodes(a):
         man[g["stem"]] = dict(stem=g["stem"], kind=g["kind"], n=g["n"], title=g["title"], sub=g["sub"],
                               file=web.name, poster=poster.name,
                               captions=web.with_suffix(".vtt").name if cues.exists() else None,
-                              duration=round(total, 1), mb=round(size / 1e6, 2),
+                              duration=round(total, 1), mb=round(size / 1e6, 2), checkpoints=checkpoints(chapters),
                               chapters=[{"t": round(t, 1), "label": g["labels"][s], "scene": s} for t, _, s in chapters])
         over = "  OVER THE CAP" if size >= cap else ""
         print(f"{g['stem']} {g['title']}: {total / 60:.2f} min, {len(chapters)} chapters, web {size / 1e6:.1f} MB "
               f"at crf {crf}{over}")
     mpath.write_text(json.dumps(sorted(man.values(), key=lambda e: (e["kind"], e["n"])), indent=1, ensure_ascii=False))
     print(f"{mpath}: {len(man)} videos, {sum(e['duration'] for e in man.values()) / 60:.1f} min")
+
+
+def guide(a):
+    from PIL import Image
+    pkg = Path(importlib.util.find_spec("mtk").origin).parent / "site"
+    src = Path(a.tex)
+    if not src.exists():
+        shutil.copy(pkg / "guide.tex", src)
+        sys.exit(f"wrote {src} from the template: fill it in (the skill's guide.md has the rules), then run mtk guide")
+    vids = json.loads(Path("web/episodes.json").read_text()) if Path("web/episodes.json").exists() else []
+    many = sum(e["kind"] == "episode" for e in vids) > 1
+    times = {c["id"]: (f"Ep {e['n']}, " if many else "") + f"{int(c['t'] // 60)}:{int(c['t'] % 60):02d}"
+             for e in vids for c in e.get("checkpoints", [])}
+    text = src.read_text()
+    ids = re.findall(r"\\checkpoint(?:\[[^\]]*\])?\{([^}]*)\}", text)
+    for i in sorted(set(times) - set(ids)):
+        print(f"GUIDE checkpoint {i} is in the video but not in {src.name}")
+    for i in ids:
+        if i not in times:
+            print(f"GUIDE checkpoint {i} is in {src.name} but not in the rendered video (its time shows ?:??)")
+        if not re.search(r"\\solutionfor\{" + re.escape(i) + r"\}", text):
+            print(f"GUIDE checkpoint {i} has no \\solutionfor{{{i}}}")
+    web = Path("web")
+    web.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        shutil.copy(src, d / "guide.tex")
+        shutil.copy(pkg / "mtkguide.sty", d)
+        (d / "guide-times.tex").write_text("".join(f"\\mtk@time{{{i}}}{{{t}}}\n" for i, t in times.items()))
+        env = {**os.environ, "TEXINPUTS": f"{src.resolve().parent}{os.pathsep}"}  # figures next to guide.tex
+        for _ in range(2):  # twice: page references
+            r = subprocess.run(["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "guide.tex"], cwd=d,
+                               env=env, capture_output=True, text=True)
+            if r.returncode:
+                log = (d / "guide.log").read_text(errors="ignore").splitlines()
+                for k, ln in enumerate(log):
+                    if ln.startswith("!"):
+                        print("LATEX", ln, next((x.strip() for x in log[k:k + 8] if x.startswith("l.")), ""))
+                sys.exit(1)
+        aux = (d / "guide.aux").read_text()
+        W, H = (float(x) for x in re.search(r"\\mtkpage\{([\d.]+)pt\}\{([\d.]+)pt\}", aux).groups())
+        pos = {(m[0], m[1]): (int(m[2]), int(m[3]) / 65536, int(m[4]) / 65536)
+               for m in re.findall(r"\\mtkpos\{([^}]*)\}\{(top|mid|bot)\}\{(\d+)\}\{(\d+)\}\{(\d+)\}", aux)}  # sp
+        dpi = 150
+        subprocess.run(["pdftoppm", "-r", str(dpi), "-png", "guide.pdf", "pg"], cwd=d, check=True)
+        pages = sorted(d.glob("pg-*.png"), key=lambda q: int(q.stem.split("-")[1]))
+        px = lambda pt: pt * dpi / 72.27  # TeX points -> pixels
+        info = {"pdf": "guide.pdf", "pages": len(pages), "checkpoints": {}}
+        for i in ids:
+            if (i, "top") not in pos or (i, "bot") not in pos:
+                continue
+            # the site shows the problem; the answer box (below "mid") is for paper
+            (pg, x, top), (pg2, _, bot) = pos[(i, "top")], pos.get((i, "mid"), pos[(i, "bot")])
+            im = Image.open(pages[pg - 1])
+            lo = H - bot if pg2 == pg else H - 0.9 * 72.27  # the minipage never splits; this is only a guard
+            box = (max(0, int(px(x)) - 14), max(0, int(px(H - top)) - 10), min(im.width, int(px(W - x)) + 14),
+                   min(im.height, int(px(lo)) + 6))
+            im.crop(box).save(web / f"cp-{i}.png")
+            info["checkpoints"][i] = {"page": pg, "img": f"cp-{i}.png"}
+        shutil.copy(d / "guide.pdf", web / "guide.pdf")
+    (web / "guide.json").write_text(json.dumps(info, indent=1))
+    Path("out").mkdir(exist_ok=True)
+    shutil.copy(web / "guide.pdf", Path("out") / "guide.pdf")
+    print(f"{(Path('out') / 'guide.pdf').resolve()}  {info['pages']} pages, {len(info['checkpoints'])} checkpoints "
+          f"cropped for the site (web/cp-*.png); mtk site picks them up")
 
 
 def _cues(text):
@@ -540,6 +619,8 @@ def site(a):
     heading = heading or Path.cwd().name
     name = heading.partition(":")[0]  # the page's name (its tab and gallery title) stops before an explainer colon
     data = dict(title=name.strip(), heading=heading, kicker=a.kicker or "", blurb=a.blurb or "", videos=vids)
+    if (web / "guide.json").exists():  # mtk guide: the PDF and each checkpoint's crop
+        data["guide"] = json.loads((web / "guide.json").read_text())
     tpl = (Path(importlib.util.find_spec("mtk").origin).parent / "site" / "player.html").read_text()
     page = tpl.replace("{{TITLE}}", _html.escape(name.strip())).replace(
         "/*DATA*/", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
@@ -547,6 +628,8 @@ def site(a):
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(page)
     files = [e[k] for e in vids for k in ("file", "poster") if e.get(k)]
+    if data.get("guide"):
+        files += [data["guide"]["pdf"]] + [c["img"] for c in data["guide"]["checkpoints"].values()]
     for f in files:  # a separate publish folder (e.g. the scratchpad) gets its own copies
         src, dst = web / f, out / f
         if src.resolve() != dst.resolve() and (not dst.exists() or dst.stat().st_mtime < src.stat().st_mtime):
@@ -562,7 +645,8 @@ def site(a):
         size += b
     batches.append(cur)
     print("publish: Artifact file_path=index.html (in that folder) with files=<batch 1>; later batches go to the "
-          "same url with the same file_path")
+          "same url with the same file_path" + ('; pass capabilities={"downloads": true} (Save the guide)'
+                                                if data.get("guide") else ""))
     for i, bt in enumerate(batches, 1):
         print(f"batch {i}: " + json.dumps(bt))
 
@@ -711,6 +795,9 @@ def main():
     c.add_argument("--blurb", help="one or two sentences under the title")
     c.add_argument("--out", help="write index.html and copies of the videos here (default: web/)")
     c.set_defaults(fn=site)
+    c = sub.add_parser("guide")
+    c.add_argument("tex", nargs="?", default="guide.tex")
+    c.set_defaults(fn=guide)
     c = sub.add_parser("new")
     c.add_argument("slug")
     c.add_argument("--walk", action="store_true", help="exam walkthrough brief instead of a series")

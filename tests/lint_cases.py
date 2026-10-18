@@ -64,3 +64,11 @@ class S08_Overrun(VScene):
     def construct(self):
         self.beat("Short line.", FadeIn(Circle()), 8.0)  # meant 8 seconds; it's 8 clips
         self.wipe()
+
+
+class S09_Checkpoint(VScene):
+    def construct(self):
+        self.beat("Your turn: pause and do checkpoint one point one in your guide.", FadeIn(Circle()))
+        self.checkpoint("1.1", "Find the radius")
+        self.beat("The radius is one.", Indicate(Circle()))
+        self.wipe()

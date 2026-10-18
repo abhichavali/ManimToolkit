@@ -10,7 +10,7 @@
   --bg: #0f1116; --surface: #15171c; --raise: #1b1e25; --hair: #262a33;
   --ink: #eef0f4; --ink2: #b4b9c6; --muted: #7d8394; --accent: #95a2ff; --on-accent: #0f1116;
   --sky: #4a95ff; --ember: #ff7a3d; --mint: #22c58b; --lilac: #a497ff; --gold: #ffd27a; --rose: #f06ea0;
-  --good: #35c46a; --scrim: rgba(15, 17, 22, .78);
+  --good: #35c46a; --scrim: rgba(15, 17, 22, .78); --paper: #ffffff;
   --display: "Figtree", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --body: "Figtree", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -91,6 +91,26 @@ details.tx summary { cursor: pointer; font: 600 14px/1.2 var(--body); color: var
 .keys { color: var(--muted); font: 400 12.5px/1.5 var(--body); margin: 0; }
 .keys kbd { font: 500 11.5px/1 var(--mono); border: 1px solid var(--hair); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; color: var(--ink2); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn { font: 600 14px/1.2 var(--body); border-radius: 999px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--hair);
+  background: var(--raise); color: var(--ink); text-decoration: none; display: inline-block; }
+.btn.primary { background: var(--gold); border-color: var(--gold); color: var(--on-accent); }
+.btn:disabled { opacity: .6; cursor: default; }
+.cp { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--gold); border-radius: 10px; background: var(--surface); min-width: 0; }
+.cp .eyebrow { margin: 0; font: 600 12px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+.cp h3 { margin: 0; font: 800 19px/1.3 var(--display); text-wrap: balance; }
+.cp .page { margin: 0; background: var(--paper); border-radius: 6px; padding: 8px; overflow-x: auto; }
+.cp .page img { display: block; width: 100%; max-width: 100%; height: auto; }
+.cp .where { margin: 0; color: var(--muted); font-size: 13.5px; }
+.cp .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.tl .cpn { position: absolute; top: -6px; width: 9px; height: 9px; margin-left: -4.5px; background: var(--gold); transform: rotate(45deg);
+  border-radius: 1px; pointer-events: none; box-shadow: 0 0 0 2px var(--bg); }
+.chapters .pen { width: 9px; height: 9px; margin-left: 1px; background: var(--gold); transform: rotate(45deg); border-radius: 1px; }
+.chapters .ok { font-style: normal; color: var(--good); font-size: 12.5px; margin-left: 6px; }
+.guide { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--hair); border-radius: 8px; }
+.guide h3 { margin: 0; }
+.guide p { margin: 0; color: var(--ink2); font-size: 14px; }
+.switch { display: flex; gap: 8px; align-items: center; color: var(--ink2); font-size: 14px; cursor: pointer; }
+.switch input { accent-color: var(--gold); width: 16px; height: 16px; margin: 0; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 </style>
 
@@ -106,6 +126,7 @@ details.tx summary { cursor: pointer; font: 600 14px/1.2 var(--body); color: var
     <section class="stage" aria-label="Player">
       <div class="frame"><video id="v" playsinline preload="metadata"></video><div class="vov" hidden></div></div>
       <p class="meta" id="status" hidden></p>
+      <section class="cp" id="cp" hidden aria-live="polite" aria-label="Checkpoint"></section>
       <div class="now"><p class="meta" id="nowmeta"></p><h2 id="nowtitle"></h2><p class="sub" id="nowsub"></p></div>
       <div class="tl" id="tl" role="presentation"></div>
       <ol class="chapters" id="ch" aria-label="Chapters"></ol>
@@ -131,6 +152,8 @@ const store = {  // per-viewer conveniences only: where you left off, what you'v
   set(k, x) { try { localStorage.setItem(KEY + k, JSON.stringify(x)); } catch (e) { } },
 };
 const KINDS = { episode: 'Episodes', problem: 'Problems' };
+const G = D.guide || null;  // mtk guide: {pdf, checkpoints: {id: {page, img}}}
+let cpOpen = null, prevT = 0, dl = null;
 const label = e => `${e.kind === 'problem' ? 'Problem' : 'Episode'} ${e.n}`;
 
 /* ---------------- video loading (the Chromium seek fix) ----------------
@@ -159,7 +182,7 @@ function overlay(text, button) {
 }
 function status(text) { const st = $('#status'); st.hidden = text == null; st.textContent = text || ''; }
 function idle() {  // controls hidden and nothing to report: offer a play button
-  if (!v.controls && v.paused && !v.dataset.seekTo && v.dataset.mode !== 'failed') overlay(null, playBtn);
+  if (!v.controls && v.paused && !v.dataset.seekTo && v.dataset.mode !== 'failed' && !cpOpen) overlay(null, playBtn);
 }
 function ready() {  // the video can seek anywhere now: hand over to the native controls
   v.controls = true;
@@ -286,9 +309,58 @@ function setVideo(url) {
 let cur = null, cues = null, lastSave = 0;
 function seek(t) { jump(t, true); }
 
+/* ---------------- checkpoints: the video pauses so the viewer works the guide ---------------- */
+const cpList = e => (e && e.checkpoints) || [];
+const isDone = id => !!store.get('done:' + id, false);
+const autoPause = () => store.get('autopause', true);
+function saveBtn() {
+  if (!G) return '';
+  if (dl) return '<button class="btn" type="button" data-act="save">Save the guide (PDF)</button>';
+  if (!window.claude) return `<a class="btn" href="${esc(G.pdf)}" target="_blank" rel="noopener">Open the guide (PDF)</a>`;
+  return '';  // inside claude.ai without the downloads capability: a file link wouldn't work
+}
+function openCheckpoint(c) {
+  cpOpen = c;
+  v.pause();
+  const g = G && G.checkpoints && G.checkpoints[c.id];
+  $('#cp').innerHTML = `<p class="eyebrow">Your turn · Checkpoint ${esc(c.id)}</p><h3>${esc(c.prompt)}</h3>
+    ${g ? `<figure class="page"><img src="${esc(g.img)}" alt="Checkpoint ${esc(c.id)} as printed in the guide: ${esc(c.prompt)}"></figure>
+      <p class="where">Page ${g.page} of your guide. Work it there, then come back: the video shows the answer next.</p>`
+      : '<p class="where">Work it on paper, then come back: the video shows the answer next.</p>'}
+    <div class="acts"><button class="btn primary" type="button" data-act="done">Done, show me the answer</button>
+    <button class="btn" type="button" data-act="skip">Skip for now</button>${saveBtn()}</div>`;
+  $('#cp').hidden = false;
+  overlay(null);  // the video's own "Your turn" card is on screen; the panel below carries the rest
+  try { $('#cp').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { }
+}
+function closeCheckpoint(done) {
+  if (!cpOpen) return;
+  if (done) store.set('done:' + cpOpen.id, true);
+  cpOpen = null;
+  $('#cp').hidden = true;
+  overlay(null);
+  renderChapters(cur);
+  renderShelf();
+  tick();
+}
+async function saveGuide(btn) {
+  btn.disabled = true;
+  try {
+    const blob = await (await fetch(G.pdf)).blob();
+    await dl.save({ filename: `${(D.title || 'Study').replace(/[^\w .-]+/g, '').trim() || 'Study'} guide.pdf`, data: blob });
+    btn.textContent = 'Saved';
+  } catch (e) {
+    btn.textContent = e && e.code === 'declined' ? 'Save the guide (PDF)' : 'Saving isn\u2019t available here';
+  } finally { btn.disabled = false; }
+}
+
 function renderShelf() {
   const kinds = [...new Set(VIDS.map(e => e.kind))];
-  $('#shelf').innerHTML = kinds.map(k => `<section><h3>${esc(KINDS[k] || k)}</h3><ul>${VIDS.filter(e => e.kind === k).map(e => {
+  const all = VIDS.flatMap(cpList);
+  const guide = all.length ? `<section class="guide"><h3>Your guide</h3>
+    <p>${all.filter(c => isDone(c.id)).length} of ${all.length} checkpoints done</p>${saveBtn()}
+    <label class="switch"><input type="checkbox" id="autopause"${autoPause() ? ' checked' : ''}> Pause at checkpoints</label></section>` : '';
+  $('#shelf').innerHTML = guide + kinds.map(k => `<section><h3>${esc(KINDS[k] || k)}</h3><ul>${VIDS.filter(e => e.kind === k).map(e => {
     const seen = Math.min(1, store.get('seen:' + e.stem, 0));
     return `<li><button class="card" type="button" data-stem="${esc(e.stem)}"${cur && cur.stem === e.stem ? ' aria-current="true"' : ''}>
       <span class="thumb">${e.poster ? `<img src="${esc(e.poster)}" alt="" loading="lazy">` : ''}<span class="dur">${fmt(e.duration)}</span>
@@ -303,8 +375,11 @@ function renderChapters(e) {
   $('#tl').innerHTML = ch.map((c, i) => {
     const end = i + 1 < ch.length ? ch[i + 1].t : T;
     return `<span data-i="${i}" style="flex:${Math.max(.001, end - c.t)} 1 0;background:var(${HUES[i % HUES.length]})" title="${esc(c.label)}"></span>`;
-  }).join('') + '<i class="head" id="head"></i>';
-  $('#ch').innerHTML = ch.map((c, i) => `<li><button type="button" data-t="${c.t}"><span class="dot" style="background:var(${HUES[i % HUES.length]})"></span><time>${fmt(c.t)}</time><span>${esc(c.label)}</span></button></li>`).join('');
+  }).join('') + cpList(e).map(c => `<b class="cpn" style="left:${(100 * c.t / T).toFixed(3)}%"></b>`).join('') + '<i class="head" id="head"></i>';
+  const rows = ch.map((c, i) => ({ t: c.t, html: `<li><button type="button" data-t="${c.t}" data-ci="${i}"><span class="dot" style="background:var(${HUES[i % HUES.length]})"></span><time>${fmt(c.t)}</time><span>${esc(c.label)}</span></button></li>` }))
+    .concat(cpList(e).map(c => ({ t: c.t + .001, html: `<li><button type="button" data-t="${c.t}" data-cp="${esc(c.id)}"><span class="pen"></span><time>${fmt(c.t)}</time><span>Checkpoint ${esc(c.id)} · ${esc(c.prompt)}${isDone(c.id) ? '<em class="ok">done</em>' : ''}</span></button></li>` })))
+    .sort((a, b) => a.t - b.t);
+  $('#ch').innerHTML = rows.map(r => r.html).join('');
 }
 
 const capTrack = v.addTextTrack('captions', 'English', 'en');  // one track, refilled per video (cues are embedded)
@@ -329,6 +404,8 @@ function open(stem, t, play) {
   cur = e;
   store.set('last', e.stem);
   if (!same) {
+    closeCheckpoint(false);
+    prevT = 0;
     freeBlobs();
     cues = null;
     $('#txb').innerHTML = '';
@@ -349,7 +426,9 @@ function open(stem, t, play) {
     else v.addEventListener('loadedmetadata', () => jump(t, play), { once: true });
   } else if (resume != null) {  // where this viewer left off: applied on play, so opening the page downloads nothing
     $('#nowmeta').textContent += ` · resumes at ${fmt(resume)}`;
-    v.addEventListener('play', () => { if (v.dataset.want === e.file && v.currentTime < 1) jump(resume); }, { once: true });
+    v.addEventListener('play', () => {  // unless the viewer already chose a spot (a jump waiting for the copy)
+      if (v.dataset.want === e.file && v.currentTime < 1 && !v.dataset.seekTo) jump(resume);
+    }, { once: true });
     if (play) v.play().catch(() => {});
   } else if (play) v.play().catch(() => {});
   renderShelf();
@@ -359,12 +438,17 @@ function open(stem, t, play) {
 function tick() {
   if (!cur) return;
   const t = v.currentTime, T = cur.duration || v.duration || 1;
+  // playing across a checkpoint (not seeking past it) pauses there, until the viewer marks it done
+  const hit = !v.paused && !cpOpen && autoPause() && t - prevT < 1.5
+    && cpList(cur).find(c => prevT < c.t && c.t <= t && !isDone(c.id));
+  prevT = t;
+  if (hit) openCheckpoint(hit);
   const head = $('#head');
   if (head) head.style.left = `calc(${(100 * t / T).toFixed(3)}% - 1px)`;
   const ch = cur.chapters || [];
   let k = -1;
   ch.forEach((c, i) => { if (c.t <= t + .05) k = i; });
-  document.querySelectorAll('#ch button').forEach((b, i) => b.setAttribute('aria-current', String(i === k)));
+  document.querySelectorAll('#ch button[data-ci]').forEach(b => b.setAttribute('aria-current', String(+b.dataset.ci === k)));
   document.querySelectorAll('#tl span').forEach((s, i) => s.classList.toggle('on', i === k));
   if (cues && $('#tx').open) {
     document.querySelectorAll('#txb button').forEach((b, i) => b.classList.toggle('on', cues[i].a <= t && t < cues[i].b));
@@ -382,6 +466,8 @@ function neighbor(step) {
 }
 
 v.addEventListener('timeupdate', tick);
+v.addEventListener('seeking', () => { prevT = v.currentTime; });  // a jump never triggers a checkpoint
+v.addEventListener('play', () => { if (cpOpen) closeCheckpoint(false); });  // pressing play is "skip for now"
 v.addEventListener('seeked', tick);
 v.addEventListener('ended', () => {
   store.set('pos:' + cur.stem, 0);
@@ -396,7 +482,20 @@ v.addEventListener('ended', () => {
   overlay(null, b);
 });
 $('#shelf').addEventListener('click', ev => { const b = ev.target.closest('.card'); if (b) open(b.dataset.stem, null, true); });
-$('#ch').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) seek(+b.dataset.t); });
+$('#ch').addEventListener('click', ev => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  const c = b.dataset.cp && cpList(cur).find(x => x.id === b.dataset.cp);
+  if (c) { jump(c.t, false); openCheckpoint(c); } else seek(+b.dataset.t);
+});
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-act]');
+  if (!b) return;
+  if (b.dataset.act === 'save') { saveGuide(b); return; }
+  closeCheckpoint(b.dataset.act === 'done');
+  v.play().catch(() => {});
+});
+$('#shelf').addEventListener('change', ev => { if (ev.target.id === 'autopause') store.set('autopause', ev.target.checked); });
 $('#tl').addEventListener('click', ev => {
   const r = ev.currentTarget.getBoundingClientRect();
   seek((ev.clientX - r.left) / r.width * (cur.duration || v.duration || 0));
@@ -432,5 +531,8 @@ $('#meta').textContent = [count('episode') && `${count('episode')} episode${coun
   count('problem') && `${count('problem')} problem walkthrough${count('problem') > 1 ? 's' : ''}`,
   `${Math.round(mins)} min`].filter(Boolean).join(' · ');
 wire();
+if (G && window.claude && window.claude.use) {  // the downloads capability: Save the guide
+  window.claude.use('downloads').then(x => { dl = x; renderShelf(); if (cpOpen) openCheckpoint(cpOpen); }).catch(() => { });
+}
 if (!fromHash()) open(store.get('last', VIDS[0] && VIDS[0].stem), null, false);
 </script>

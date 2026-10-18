@@ -1,0 +1,42 @@
+% mtkguide: checkpoints for an mtk study guide (a compact handout worked alongside the video).
+% `mtk guide` copies this file next to guide.tex, writes guide-times.tex (each checkpoint's time in the video),
+% compiles, and crops every checkpoint block out of the PDF for the study site, using the positions below.
+%
+%   \checkpoint[answer box height]{1.2}{Short title}{The problem}   (default box height: \mtkboxht = 3cm)
+%   \cptime{1.2}                    the checkpoint's time in the video (?:?? until the video is rendered)
+%   \hintfor{1.2} text              a hint, in the Hints section at the back
+%   \solutionfor{1.2}{Title} text   a full solution, in the Solutions section at the back
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{mtkguide}[2026/10/18 mtk study guide checkpoints]
+\RequirePackage{xcolor}
+\definecolor{mtkgold}{HTML}{A67200}
+\definecolor{mtkmuted}{HTML}{646B7A}
+
+\newcommand{\mtk@time}[2]{\expandafter\gdef\csname mtk@t@#1\endcsname{#2}}
+\InputIfFileExists{guide-times.tex}{}{}
+\newcommand{\cptime}[1]{\ifcsname mtk@t@#1\endcsname\csname mtk@t@#1\endcsname\else ?:??\fi}
+
+% \mtkpos{id}{top|mid|bot}{page}{x}{y}: positions in sp from the page's bottom-left, read by `mtk guide`
+\newcommand{\mtk@mark}[2]{\pdfsavepos
+  \write\@auxout{\string\mtkpos{#1}{#2}{\thepage}{\the\pdflastxpos}{\the\pdflastypos}}}
+\def\mtkpos#1#2#3#4#5{}
+\def\mtkpage#1#2{}
+\AtBeginDocument{\immediate\write\@auxout{\string\mtkpage{\the\pdfpagewidth}{\the\pdfpageheight}}}
+
+\newlength{\mtkboxht}
+\setlength{\mtkboxht}{3cm}
+\newcommand{\checkpoint}[4][\mtkboxht]{%
+  \par\medskip
+  \mtk@mark{#2}{top}\nopagebreak
+  \noindent\begin{minipage}[t]{\linewidth}
+    {\color{mtkgold}\sffamily\bfseries Checkpoint #2}\quad{\bfseries #3}\hfill
+    {\color{mtkmuted}\small video \cptime{#2}}\par\smallskip
+    #4\par\mtk@mark{#2}{mid}\smallskip
+    \noindent\fcolorbox{mtkmuted}{white}{\parbox[t][#1][t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
+      {\color{mtkmuted}\footnotesize Your answer}}
+  \end{minipage}\par
+  \mtk@mark{#2}{bot}\medskip}
+\newcommand{\hintfor}[1]{\par\medskip\noindent{\color{mtkgold}\sffamily\bfseries Checkpoint #1}\quad}
+\newcommand{\solutionfor}[2]{\par\bigskip\noindent{\color{mtkgold}\sffamily\bfseries Checkpoint #1}\quad
+  {\bfseries #2}\par\smallskip}
+\endinput

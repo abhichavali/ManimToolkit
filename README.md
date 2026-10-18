@@ -15,8 +15,9 @@ tokens and wall-clock time the old `manim-explainer` skill spent, without changi
 | `mtk/kit.py` | Pieces past videos kept rewriting: `E` (concept-colored math), `morph`, cards, MC choices, write-up sheets, `ArrayRow`, `CodeBlock`, `GraphMob`, `rec_tree` |
 | `mtk/view3d.py` | Fast fake 3D: `SurfaceImage` (shaded surfaces) and `Cloud` (point clouds) as numpy rasters |
 | `mtk/pde.py`, `mtk/recipes.py` | PDE kit and the recipe gallery (26: R01-R14, P01-P11, W01) |
-| `mtk/site/player.html` | The study-page template `mtk site` fills: player, chapters, captions, transcript, shelves |
-| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `check`, `render`, `episodes`, `site`, `frames`, `recipe` |
+| `mtk/site/player.html` | The study-page template `mtk site` fills: player, chapters, captions, transcript, shelves, checkpoints |
+| `mtk/site/guide.tex`, `mtk/site/mtkguide.sty` | The study-guide template and its checkpoint macros (`mtk guide`) |
+| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `check`, `render`, `episodes`, `guide`, `site`, `frames`, `recipe` |
 | `plugin/` | The skill: `SKILL.md` (coordinator), `API.md` (the one page scene writers read), problem-set and mind-blow docs |
 | `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards, briefs, captions and the site build (offline voice, no API cost); `tests/serve.py`: a local server without range support, like the artifact file server |
 
@@ -121,3 +122,27 @@ Checked in the desktop app's Chromium pane against `tests/serve.py` at 800 KB/s.
 `[0, 0]`, and jumps to 100 s and rewinds to 20 s both restarted at 0. With it on: chapter jumps made during the
 download landed on the latest one once the copy arrived (9.6 s); native rewinds and the keys worked after that. On
 a server with range support, controls showed at once, every seek was native, and nothing extra downloaded.
+
+## Study guides the video pauses for
+
+Watching a clear explanation feels like learning, but recognizing each step as it goes by is not the same as
+producing it. With `--guide`, every video gets a compact PDF handout, and the study site pauses the video at each
+checkpoint until the viewer has worked it. Checkpoints sit just before the video reveals the answer, so resuming
+gives immediate feedback.
+
+- **In the video**: `self.checkpoint("1.2", "Factor what's inside the brackets")` shows a "Your turn" card and
+  logs its time at render (`media/subs/*.marks.json`); `mtk episodes` carries the times into `episodes.json`.
+- **The guide**: `guide.tex` (template from `mtk guide`) uses `\checkpoint{1.2}{Title}{problem}`, an unbreakable
+  block with an answer box. `mtk guide` fills in each checkpoint's video time, compiles, and crops exactly that
+  block out of the rendered page for the site, using `\pdfsavepos` marks LaTeX writes to the aux. It warns when
+  the video and the guide disagree on checkpoint ids, or a checkpoint has no solution.
+- **On the site**: playing across a checkpoint pauses the video (seeking past one never does) and opens a panel
+  with that problem as printed in the guide, and Done (marks it, then plays the reveal), Skip, and Save the guide
+  (the artifact `downloads` capability). Diamonds on the chapter timeline, checkpoint rows in the chapter list, a
+  progress count and a "Pause at checkpoints" switch; done checkpoints play through on a rewatch.
+
+Checked end to end on the Newton demo, in the desktop app's Chromium pane against `tests/serve.py` without range
+support: two checkpoints (at 1:24 and 2:09) paused within 0.3 s of their times with the right crops; Done, Skip,
+rewatch, the switch, jumping over a checkpoint and clicking a checkpoint row all behaved; a chapter jump made while
+the full video was still downloading landed and then paused at the next checkpoint. That test also caught a bug:
+a pending "resume where you left off" used to override such a jump.

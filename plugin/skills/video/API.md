@@ -70,6 +70,11 @@ class S03_Remainder(VScene):      # S## names, rendered in sorted order; 30-120 
   sits behind m (raises m's z_index) so glyphs stay sharp; don't hand-roll halos · `strike(m)` line through · `Cross(m)` (manim) X over
 - `span(a, b, label, side=DOWN)` dimension marker · frame is 14.2 x 8, header at top-left
 
+**Guide checkpoints**: `self.checkpoint("1.2", "Compute x_2 from x_1 = 1.5")` shows a "Your turn" card, and the
+study site pauses the video there until the viewer has worked checkpoint 1.2 in the PDF guide. Put it exactly
+where the brief's `→` line says: after the cue beat, right before the beat that reveals the answer. Prompt: one
+short line of plain words, no TeX.
+
 **Worked problems** (walkthroughs): `self.try_it()` the "Try it before we solve it" pause · `answer_box(m)` ·
 `marked(row, good)` a choices() row already marked · `rubric(pts, items, traps)` grading points over the common trap
 (TX sentences) · `check(value, expected, rtol=2e-3)` asserts a number (relative: tiny SI values can't slip through)

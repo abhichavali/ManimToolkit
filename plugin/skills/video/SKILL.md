@@ -1,7 +1,7 @@
 ---
 name: video
-description: Make a 3Blue1Brown-style narrated explainer video (manim animation + Gemini TTS voice, 1080p30) on any topic, with deep intuition and full rigor. Optional post-watch problem set (--problems) and an optional "blow your mind" moment (--mind-blow). Use when the user asks for an explainer, animated, manim or 3b1b-style video ("make me a video on X", "explain X in a video"), a problem set to go with a video, or "blow my mind mode".
-argument-hint: <topic, or a path to notes/paper> [--problems] [--mind-blow] [--minutes N] [--out DIR]
+description: Make a 3Blue1Brown-style narrated explainer video (manim animation + Gemini TTS voice, 1080p30) on any topic, with deep intuition and full rigor. Optional post-watch problem set (--problems), a PDF study guide the video pauses for (--guide), and an optional "blow your mind" moment (--mind-blow). Use when the user asks for an explainer, animated, manim or 3b1b-style video ("make me a video on X", "explain X in a video"), a problem set to go with a video, or "blow my mind mode".
+argument-hint: <topic, or a path to notes/paper> [--guide] [--problems] [--mind-blow] [--minutes N] [--out DIR]
 ---
 
 # Explainer video
@@ -11,6 +11,8 @@ Request: `$ARGUMENTS`
 Parse the topic and flags; plain-language equivalents count ("with a problem set", "blow my mind").
 - `--problems`: also make a post-watch problem set. Read `problem-set.md` in this skill's folder.
 - `--mind-blow`: build in one genuine "whoa" moment, only if one fits honestly. Read `mind-blow.md`.
+- `--guide`: a PDF study guide the video pauses for, so the viewer works problems instead of only watching
+  ("with a guide", "workbook", "make it active"). Read `guide.md`.
 - `--minutes N`: target length, default 10. `--out DIR`: project folder, default `~/Movies/Explainers/<topic-slug>`.
 The final render is always 1080p30.
 
@@ -100,6 +102,9 @@ episode from these headings. Text after `[budget]` becomes the scene's chapter l
   the `→` lines: concrete enough that the scene agent doesn't have to invent the explanation, loose enough to
   leave it the layout.
 - 2 to 4 predict beats (`→ self.predict("question", <this line>)`); end major sections with a key_box.
+- With `--guide`: a checkpoint every 3 to 4 minutes, just before a reveal: the cue beat, its
+  `→ self.checkpoint("1.2", "short prompt")` line, then the reveal beat (`guide.md`). Write `guide.tex` alongside
+  the brief, with every answer verified.
 - With `--mind-blow`: candidates, the chosen moment (or why none fits), and its plant and reveal beats.
 - Scene writers never open the source: every fact they need is in the brief.
 
@@ -151,12 +156,15 @@ budget), a poster, captions and `web/episodes.json` (titles, durations, chapters
 your scratchpad>` (after `mtk episodes`) writes `index.html` (a study page: player, chapter timeline and list,
 captions and a clickable transcript built in, resume where you left off, episode and problem shelves, keys
 j k l n p c) next to copies of the videos, and prints the publish plan: Artifact publish with `file_path` that
-`index.html` and `files` = batch 1, then each later batch to the same url (64 MB per publish, 15 MB per file). Its
+`index.html` and `files` = batch 1, then each later batch to the same url (64 MB per publish, 15 MB per file).
+With a guide, the page pauses the video at every checkpoint and shows that checkpoint's problem from the PDF;
+publish it with `capabilities: {"downloads": true}` so viewers can save the guide. Its
 player is the one to use for any video page: Chromium can't seek videos served without byte ranges (the artifact
 file server), and the player works around it (it fetches the full file and switches to it, with every seek waiting
 for it instead of snapping to 0). Test it locally with `python3 <repo>/tests/serve.py <folder> 8765 --kbps 800`
-(no range support, like the artifact server; add `--ranges` for a normal host). Storyboards show beat
-ends; check motion and full resolution with one image: `mtk frames out/<name>.mp4 <4-6 seconds mid-animation in
+(no range support, like the artifact server; add `--ranges` for a normal host). With `--guide`: `mtk episodes BRIEF.md`,
+then `mtk guide` (it fills in each checkpoint's video time, compiles and crops; fix every GUIDE line), then read
+every page of `out/guide.pdf`. Storyboards show beat ends; check motion and full resolution with one image: `mtk frames out/<name>.mp4 <4-6 seconds mid-animation in
 the busiest scenes>`, then Read it.
 
 ## Walkthrough mode (exam problems)
@@ -180,6 +188,6 @@ render so its timestamps match.
 
 ## 8. Deliver
 
-Tell the user the video path and length, the chapter list, the problem-set PDF path, the site's link if you
-published one, and the timestamp of the mind-blow moment if there is one (or one line on why none fit). Share the files (SendUserFile if available).
+Tell the user the video path and length, the chapter list, the problem-set or guide PDF path, the site's link if
+you published one, and the timestamp of the mind-blow moment if there is one (or one line on why none fit). Share the files (SendUserFile if available).
 Say plainly anything that isn't right yet.
