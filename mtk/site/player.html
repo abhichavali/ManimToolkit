@@ -111,6 +111,7 @@ details.tx summary { cursor: pointer; font: 600 14px/1.2 var(--body); color: var
 .guide p { margin: 0; color: var(--ink2); font-size: 14px; }
 .switch { display: flex; gap: 8px; align-items: center; color: var(--ink2); font-size: 14px; cursor: pointer; }
 .switch input { accent-color: var(--gold); width: 16px; height: 16px; margin: 0; }
+[hidden] { display: none !important; }  /* .cp etc. set display, which would otherwise beat the hidden attribute */
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 </style>
 
