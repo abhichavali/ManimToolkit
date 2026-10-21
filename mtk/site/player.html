@@ -118,6 +118,26 @@ details.tx summary { cursor: pointer; font: 600 14px/1.2 var(--body); color: var
 .subj a { color: var(--accent); font-size: 14px; }
 .switch { display: flex; gap: 8px; align-items: center; color: var(--ink2); font-size: 14px; cursor: pointer; }
 .switch input { accent-color: var(--gold); width: 16px; height: 16px; margin: 0; }
+.chat { display: grid; gap: 10px; border-top: 1px solid var(--hair); padding-top: 14px; }
+.chat .head2 { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.chat h3 { margin: 0; font: 600 14px/1.2 var(--body); color: var(--ink2); }
+.chat .link { background: none; border: 0; padding: 0; color: var(--muted); font: 500 13px/1 var(--body); cursor: pointer; }
+.msgs { display: grid; gap: 12px; max-height: 460px; overflow-y: auto; padding-right: 6px; }
+.msgs:empty { display: none; }
+.msgs .q { justify-self: end; max-width: 85%; background: var(--raise); border-radius: 12px 12px 3px 12px; padding: 8px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msgs .a { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.msgs .a.wait { color: var(--muted); }
+.ts { font: 500 12.5px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--accent); background: none; border: 1px solid var(--hair);
+  border-radius: 4px; padding: 2px 5px; cursor: pointer; vertical-align: 1px; }
+.ts:hover { background: var(--raise); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: 500 13.5px/1.2 var(--body); padding: 7px 12px; border-radius: 999px; border: 1px solid var(--hair); background: none; color: var(--ink2); cursor: pointer; }
+.chips button:hover { background: var(--raise); color: var(--ink); }
+.ask { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.ask textarea { font: 400 15px/1.45 var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--hair); border-radius: 10px;
+  padding: 9px 12px; resize: vertical; min-height: 44px; max-height: 240px; }
+.btn.go { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.chat .note { margin: 0; color: var(--muted); font-size: 12.5px; }
 [hidden] { display: none !important; }  /* .cp etc. set display, which would otherwise beat the hidden attribute */
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 </style>
@@ -139,6 +159,14 @@ details.tx summary { cursor: pointer; font: 600 14px/1.2 var(--body); color: var
       <div class="now"><p class="meta" id="nowmeta"></p><h2 id="nowtitle"></h2><p class="sub" id="nowsub"></p></div>
       <div class="tl" id="tl" role="presentation"></div>
       <ol class="chapters" id="ch" aria-label="Chapters"></ol>
+      <section class="chat" id="chat" hidden aria-label="Ask about this video">
+        <div class="head2"><h3>Ask about this video</h3><button class="link" type="button" id="chatclear" hidden>Clear</button></div>
+        <div class="msgs" id="msgs" aria-live="polite"></div>
+        <div class="chips" id="chips"></div>
+        <form class="ask" id="askf"><textarea id="q" rows="2" aria-label="Your question" placeholder="Ask anything about this video…"></textarea>
+          <button class="btn go" type="submit" id="askb">Ask</button></form>
+        <p class="note" id="chatnote"></p>
+      </section>
       <details class="tx" id="tx"><summary>Transcript</summary><div class="txb" id="txb"></div></details>
       <p class="keys"><kbd>k</kbd> play or pause · <kbd>j</kbd> <kbd>l</kbd> back or ahead 10 s · <kbd>n</kbd> <kbd>p</kbd> next or previous video · <kbd>c</kbd> captions</p>
     </section>
@@ -418,7 +446,7 @@ function open(stem, t, play) {
   if (!e) {
     closeCheckpoint(false); cur = null; v.removeAttribute('src'); v.load(); overlay(null);
     $('#nowmeta').textContent = ''; $('#nowsub').hidden = true; $('#tl').innerHTML = ''; $('#ch').innerHTML = '';
-    $('#nowtitle').textContent = 'No videos here yet'; renderShelf(); return;
+    $('#nowtitle').textContent = 'No videos here yet'; renderShelf(); renderChat(); return;
   }
   const same = cur && cur.stem === e.stem;
   cur = e;
@@ -438,6 +466,8 @@ function open(stem, t, play) {
     $('#nowsub').hidden = !e.sub;
     renderChapters(e);
     if ($('#tx').open) loadTranscript();
+    if (chatCtl) chatCtl.abort();
+    renderChat();
   }
   const saved = store.get('pos:' + e.stem, 0);
   const resume = t == null && !same && saved > 5 && saved < (e.duration || 0) - 10 ? saved : null;
@@ -454,6 +484,105 @@ function open(stem, t, play) {
   renderShelf();
   try { history.replaceState(null, '', '#' + e.stem); } catch (err) { }
 }
+
+/* ---------------- chat: ask Claude about this video ----------------
+   Only on sites `mtk site` built where it found an Anthropic API key (D.chat). Served by `mtk serve`, questions go
+   to its api/chat, which adds the key server-side; published as an artifact, the `sample` capability answers on
+   each viewer's own claude.ai account. The key itself is never in the page. Conversations are per video, per
+   viewer (localStorage). */
+let chatAsk = null, chatCtl = null, chatOff = '';  // chatAsk(system, messages, onText, signal) -> full answer
+const CHIPS = ['Summarize this video in three points', 'Explain what’s on screen right now', 'Quiz me on this video'];
+const CHAT_ERR = { not_granted: 'Asking Claude isn’t allowed for this page', sampling_disabled: 'Claude isn’t available for this account',
+  rate_limited: 'Too many questions for now: try again in a minute', session_expired: 'Sign in to claude.ai again, then ask',
+  refused: 'Claude declined to answer that one', empty_completion: 'Claude gave no answer: try asking differently' };
+const CHAT_OFF = ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'];
+function chatSystem(e) {  // stable per video, so the API can cache it; the viewer's position goes in each question
+  const lines = (xs, f) => xs.map(f).join('\n'), cps = cpList(e);
+  return `You answer questions from someone studying with a narrated explainer video, on the video's study page. Ground every answer in the video: its transcript is below, with times.
+- Be brief: a few sentences or a short list, unless they ask for more. Use the video's own notation, names and examples.
+- Point to the moment the video covers something as [m:ss], e.g. [1:23], with times from the transcript: the page turns these into links that jump the video there.
+- If the video doesn't cover the question, say so in a sentence, then answer from general knowledge, marked as going beyond the video.
+${cps.length ? '- Checkpoints are exercises the viewer is meant to work out alone before the video reveals the answer. For a checkpoint they have not marked done, give a hint or the next step, not the answer, unless they ask outright for the answer.\n' : ''}- Write math in plain text with Unicode (x², √2, eₙ₊₁, ≈), never LaTeX. Use **bold** sparingly; no headings.
+
+VIDEO: ${label(e)}: ${e.title}${e.sub ? ` (${e.sub})` : ''}, ${fmt(e.duration)} long${D.title ? `, from "${D.title}"` : ''}
+
+CHAPTERS
+${lines(e.chapters || [], c => `[${fmt(c.t)}] ${c.label}`)}
+${cps.length ? `\nCHECKPOINTS (the video pauses at each; the viewer works it in a PDF guide, then the video reveals the answer)\n${lines(cps, c => `[${fmt(c.t)}] ${c.id}: ${c.prompt}`)}\n` : ''}
+TRANSCRIPT
+${lines(e.cues || [], ([a, , text]) => `[${fmt(a)}] ${text}`)}`;
+}
+async function viaServer(system, messages, onText, signal) {  // mtk serve: plain text streamed back
+  let text = '';
+  try {
+    const r = await fetch('api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system, messages }), signal });
+    if (!r.ok) { let m = `error ${r.status}`; try { m = (await r.json()).error || m; } catch (x) { } throw new Error(m); }
+    const rd = r.body.getReader(), dec = new TextDecoder();
+    for (;;) {
+      const { done, value } = await rd.read();
+      if (done) return text;
+      text += dec.decode(value, { stream: true });
+      onText(text);
+    }
+  } catch (x) { throw { code: signal.aborted ? 'cancelled' : 'upstream_error', message: x.message, text }; }
+}
+const viaSample = sample => (system, messages, onText, signal) =>  // no system role: the instructions lead as a user turn
+  sample([{ role: 'user', content: system }, ...messages], { model: D.chat.model, modelTier: 'default', cache: false, signal, onText: u => onText(u.text) })
+    .then(r => r.text + (r.truncated ? '\n\n(The answer was cut off.)' : ''));
+const rich = s => esc(s).replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+  .replace(/\[(\d{1,3}):([0-5]\d)\]/g, (m, a, b) => `<button class="ts" type="button" data-t="${60 * a + +b}" title="Jump to ${a}:${b}">${a}:${b}</button>`);
+function renderChat() {
+  $('#chat').hidden = !chatAsk || !cur;
+  if ($('#chat').hidden) return;
+  const log = store.get('chat:' + cur.stem, []).filter(x => x.a || chatCtl), m = $('#msgs');
+  m.innerHTML = log.map(x => `<div class="q">${esc(x.q)}</div><div class="a${x.a ? '' : ' wait'}">${x.a ? rich(x.a) : 'Thinking…'}</div>`).join('');
+  m.scrollTop = m.scrollHeight;
+  $('#chips').innerHTML = log.length || chatOff ? '' : CHIPS.map(c => `<button type="button">${esc(c)}</button>`).join('');
+  $('#chatclear').hidden = !log.length || !!chatCtl;
+  $('#askb').textContent = chatCtl ? 'Stop' : 'Ask';
+  $('#q').disabled = $('#askb').disabled = !!chatOff;
+  $('#chatnote').textContent = chatOff || `Answers come from Claude${D.chat.model ? ` (${D.chat.model})` : ''}, reading this video’s transcript${window.claude ? ', on your claude.ai account' : ''}. They can be wrong.`;
+}
+async function send(q) {
+  q = q.trim();
+  if (!q || !cur || !chatAsk || chatCtl) return;
+  const e = cur, key = 'chat:' + e.stem, log = store.get(key, []).filter(x => x.a).slice(-9), cps = cpList(e);
+  const ch = (e.chapters || []).filter(c => c.t <= v.currentTime + .5).pop();
+  const ctx = `(I'm at ${fmt(v.currentTime)} in the video${ch ? `, in "${ch.label}"` : ''}${cps.length ? `; checkpoints I've done: ${cps.filter(c => isDone(c.id)).map(c => c.id).join(', ') || 'none'}` : ''}.)`;
+  log.push({ q, ctx, a: '' });
+  const messages = log.flatMap(x => [{ role: 'user', content: `${x.ctx}\n\n${x.q}` }].concat(x.a ? [{ role: 'assistant', content: x.a }] : []));
+  const ctl = chatCtl = new AbortController();
+  store.set(key, log);
+  $('#q').value = '';
+  renderChat();
+  const out = $('#msgs').lastElementChild;
+  let text = '', note = '';
+  try {
+    text = await chatAsk(chatSystem(e), messages, t => { if (cur === e) { out.className = 'a'; out.innerHTML = rich(t); } }, ctl.signal);
+  } catch (err) {
+    text = (err && err.text) || '';
+    note = !err || err.code === 'cancelled' ? '' : CHAT_ERR[err.code] || (err.message ? `Couldn’t answer: ${err.message}` : 'Something went wrong; try again');
+    if (err && CHAT_OFF.includes(err.code)) chatOff = note;
+  }
+  chatCtl = null;
+  if (text) log[log.length - 1].a = text + (note ? `\n\n(${note}.)` : '');
+  else { log.pop(); if (cur === e && !$('#q').value) $('#q').value = q; }
+  store.set(key, log);
+  if (cur === e) { renderChat(); if (note && !text && !chatOff) $('#chatnote').textContent = note + '.'; }
+}
+async function chatInit() {
+  if (!D.chat) return;
+  try {
+    if (window.claude && window.claude.use) { const s = await window.claude.use('sample'); if (s) chatAsk = viaSample(s); }
+    else { const r = await fetch('api/chat'); if (r.ok && (await r.json()).enabled) chatAsk = viaServer; }
+  } catch (e) { }
+  renderChat();
+}
+$('#askf').addEventListener('submit', ev => { ev.preventDefault(); if (chatCtl) chatCtl.abort(); else send($('#q').value); });
+$('#q').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); if (!chatCtl) send($('#q').value); } });
+$('#chips').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) send(b.textContent); });
+$('#msgs').addEventListener('click', ev => { const b = ev.target.closest('.ts'); if (b) seek(+b.dataset.t); });
+$('#chatclear').addEventListener('click', () => { if (cur) store.set('chat:' + cur.stem, []); renderChat(); });
 
 function tick() {
   if (!cur) return;
@@ -574,5 +703,6 @@ if (SUBJ.length) {
 if (ALL.some(guideOf) && window.claude && window.claude.use) {  // the downloads capability: Save the guide
   window.claude.use('downloads').then(x => { dl = x; renderShelf(); if (cpOpen) openCheckpoint(cpOpen); }).catch(() => { });
 }
+chatInit();
 if (!fromHash()) open(store.get(sk('last'), VIDS[0] && VIDS[0].stem), null, false);
 </script>

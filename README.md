@@ -17,9 +17,10 @@ tokens and wall-clock time the old `manim-explainer` skill spent, without changi
 | `mtk/pde.py`, `mtk/recipes.py` | PDE kit and the recipe gallery (26: R01-R14, P01-P11, W01) |
 | `mtk/site/player.html` | The study-page template `mtk site` fills: player, chapters, captions, transcript, shelves, checkpoints |
 | `mtk/site/guide.tex`, `mtk/site/mtkguide.sty` | The study-guide template and its checkpoint macros (`mtk guide`) |
-| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `check`, `render`, `episodes`, `guide`, `site`, `frames`, `recipe` |
+| `mtk_serve.py` | `mtk serve`: the study site on localhost, plus the chat endpoint that answers with your API key |
+| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `check`, `render`, `episodes`, `guide`, `site`, `serve`, `frames`, `recipe` |
 | `plugin/` | The skill: `SKILL.md` (coordinator), `API.md` (the one page scene writers read), problem-set and mind-blow docs |
-| `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards, briefs, captions and the site build (offline voice, no API cost); `tests/serve.py`: a local server without range support, like the artifact file server |
+| `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards, briefs, captions and the site build (offline voice, no API cost); `tests/serve.py`: a local server without range support, like the artifact file server; `tests/mock_anthropic.py`: a stand-in Messages API for the chat tests |
 
 Scene files start `from mtk import *`; nothing is copied into projects any more.
 
@@ -146,3 +147,34 @@ support: two checkpoints (at 1:24 and 2:09) paused within 0.3 s of their times w
 rewatch, the switch, jumping over a checkpoint and clicking a checkpoint row all behaved; a chapter jump made while
 the full video was still downloading landed and then paused at the next checkpoint. That test also caught a bug:
 a pending "resume where you left off" used to override such a jump.
+
+## Ask about the video
+
+Once a study page exists, the next question is usually "wait, why?" With an Anthropic API key around, `mtk site`
+puts a chat box under the video. Claude (`claude-sonnet-5-5`) answers from that video's transcript, chapters and
+checkpoints, and cites moments as `[1:23]` links that jump the video there. Each question carries where the viewer
+is in the video and which checkpoints they have done, so a checkpoint not yet worked gets a hint, not the answer.
+Conversations are per video and per viewer (localStorage), with Stop and Clear.
+
+- **The key** is `$ANTHROPIC_API_KEY`, else `.anthropic_api_key` in the project folder, else `~/.anthropic_api_key`.
+  With no key, there is no chat box. A key that isn't scoped to a workspace also needs `$ANTHROPIC_WORKSPACE_ID` or
+  `.anthropic_workspace_id`.
+- **Locally**, `mtk serve` (in the project) serves `web/` on http://127.0.0.1:8000, with range support. Its
+  `/api/chat` adds the key server-side and streams the answer back. The transcript is a cached system block, and
+  `fallbacks="default"` retries a declined answer on the recommended model. The key never reaches the browser,
+  dotfiles are never served, and the server listens on localhost only.
+- **Published** as an artifact (the plan says to pass `capabilities: {"sample": {}}`), the same box asks Claude
+  through each viewer's own claude.ai account, so no key is involved at all.
+
+Checked with `python3 tests/test_check.py`, against `tests/mock_anthropic.py`:
+- `site()` turns chat on only when there is a key, and keeps the key out of the page.
+- `mtk serve` sends the model, workspace header, fallback beta and `cache_control`, and streams the answer.
+- Malformed history gets 400, no key gets 403, and the key file gets 404.
+
+In the desktop app's Chromium pane against the mock:
+- answers streamed in;
+- the `[2:09]` link jumped the video;
+- follow-ups carried the history and the viewer's position;
+- the conversation survived a reload;
+- Stop kept the partial answer and Clear emptied it;
+- at 375 px wide nothing overflowed.

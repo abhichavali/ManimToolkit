@@ -13,6 +13,8 @@
                                            plus the artifact publish plan (file maps in batches under 64 MB)
   mtk guide [guide.tex]                    after episodes: compile the study guide with each checkpoint's video time,
                                            crop every checkpoint for the site (web/guide.pdf, web/cp-*.png, guide.json)
+  mtk serve [--dir web] [--port 8000]      serve the site locally, seekable, with the chat box answered by Claude
+                                           using your key server-side (~/.anthropic_api_key or the project's)
   mtk new SLUG [--walk]                    ~/Movies/Explainers/SLUG with a BRIEF.md skeleton (series or walkthroughs)
   mtk frames VIDEO SEC [SEC..]             one captioned sheet of full-quality frames, for spot checks
   mtk recipe [NAME]                        list the recipe gallery, or print one recipe's source
@@ -663,6 +665,11 @@ def site(a):
                 blurb=a.blurb or cfg.get("blurb", ""), videos=vids)
     if subjects:
         data["subjects"] = subjects
+    from mtk_serve import MODEL, credentials
+    key, _, where = credentials([Path.cwd()] + [Path(s["dir"]).expanduser() for s in cfg.get("subjects", [])])
+    if key:  # the chat box exists only where a key does; the key itself never goes into the page
+        data["chat"] = {"model": MODEL}
+    print(f"chat: {'on (' + MODEL + '; key found in ' + where + ')' if key else 'off (no Anthropic API key found)'}")
     tpl = (Path(importlib.util.find_spec("mtk").origin).parent / "site" / "player.html").read_text()
     page = tpl.replace("{{TITLE}}", _html.escape(name.strip())).replace(
         "/*DATA*/", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
@@ -686,9 +693,11 @@ def site(a):
         cur[f] = str((out / f).resolve())
         size += b
     batches.append(cur)
+    caps = {**({"downloads": True} if guided else {}), **({"sample": {}} if data.get("chat") else {})}
     print("publish: Artifact file_path=index.html (in that folder) with files=<batch 1>; later batches go to the "
-          "same url with the same file_path" + ('; pass capabilities={"downloads": true} (Save the guide)'
-                                                if guided else ""))
+          "same url with the same file_path" + (f"; pass capabilities={json.dumps(caps)}" if caps else "")
+          + (" (published, the chat box asks Claude through each viewer's own claude.ai account)"
+             if data.get("chat") else ""))
     for i, bt in enumerate(batches, 1):
         print(f"batch {i}: " + json.dumps(bt))
 
@@ -756,6 +765,11 @@ def new(a):
         sys.exit(f"{b} already exists; not overwriting it")
     b.write_text(WALK if a.walk else SERIES)
     print(b)
+
+
+def serve(a):
+    from mtk_serve import serve as run
+    run(Path(a.dir) if a.dir else (Path("web") if Path("web/index.html").exists() else Path(".")), a.port)
 
 
 def dur(p):
@@ -842,6 +856,10 @@ def main():
     c = sub.add_parser("guide")
     c.add_argument("tex", nargs="?", default="guide.tex")
     c.set_defaults(fn=guide)
+    c = sub.add_parser("serve")
+    c.add_argument("--dir", help="the site folder (default: web/ if it has index.html, else here)")
+    c.add_argument("--port", type=int, default=8000)
+    c.set_defaults(fn=serve)
     c = sub.add_parser("new")
     c.add_argument("slug")
     c.add_argument("--walk", action="store_true", help="exam walkthrough brief instead of a series")

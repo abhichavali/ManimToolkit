@@ -9,12 +9,15 @@ description = "Manim toolkit for narrated 3Blue1Brown-style explainer videos (lo
 requires-python = ">=3.10"
 dependencies = ["manim>=0.19", "numpy", "pillow"]
 
+[project.optional-dependencies]
+chat = ["anthropic>=2"]
+
 [project.scripts]
 mtk = "mtk_cli:main"
 
 [tool.setuptools]
 packages = ["mtk"]
-py-modules = ["mtk_cli"]
+py-modules = ["mtk_cli", "mtk_serve"]
 
 [tool.setuptools.package-data]
 mtk = ["site/*.html", "site/*.sty", "site/*.tex"]

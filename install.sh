@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 V=~/.venvs/manim
 [ -x $V/bin/python ] || { python3 -m venv $V && uv pip install --python $V/bin/python manim; }
-uv pip install --python $V/bin/python -q -e .
+uv pip install --python $V/bin/python -q -e ".[chat]"
 mkdir -p ~/.local/bin && ln -sf $V/bin/mtk ~/.local/bin/mtk
 S=~/.claude/skills/manim-explainer
 if [ -e $S/skills/video/vid.py ]; then  # the old copy-the-toolkit version: keep it, out of the way

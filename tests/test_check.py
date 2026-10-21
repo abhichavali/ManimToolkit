@@ -60,8 +60,11 @@ w = b.parent / "proj"
 (w / "web/episodes.json").write_text(json.dumps([dict(stem="ep01", kind="episode", n=1, title="A", sub="", file="ep01.mp4",
     poster="ep01.jpg", captions="ep01.vtt", duration=2.5, mb=0.0, chapters=[{"t": 0, "label": "Hook", "scene": "S01"}])]))
 pub = b.parent / "pub"
+home = b.parent / "home"  # no ~/.anthropic_api_key here: chat stays off
+home.mkdir(exist_ok=True)
+nokey = {k: v for k, v in os.environ.items() if not k.startswith("ANTHROPIC_")} | {"HOME": str(home)}
 out = subprocess.run(["mtk", "site", "--title", "Series Name: a subtitle", "--out", str(pub)], cwd=w,
-                     capture_output=True, text=True).stdout
+                     capture_output=True, text=True, env=nokey).stdout
 page = (pub / "index.html").read_text()
 data = json.loads(re.search(r'id="data">(.*?)</script>', page, re.S).group(1).replace("<\\/", "</"))
 assert "<title>Series Name</title>" in page and data["heading"] == "Series Name: a subtitle", data["heading"]
@@ -71,7 +74,75 @@ assert 'batch 1: {"ep01.mp4"' in out, out
 if shutil.which("node"):
     js = page.split('<script>')[-1].split('</script>')[0]
     subprocess.run(["node", "-e", "new Function(require('fs').readFileSync(0, 'utf8'))"], input=js, text=True, check=True)
+assert "chat" not in data and "chat: off" in out and "sample" not in out, out
+out = subprocess.run(["mtk", "site", "--out", str(pub)], cwd=w, capture_output=True, text=True,
+                     env={**nokey, "ANTHROPIC_API_KEY": "sk-test-env"}).stdout
+page = (pub / "index.html").read_text()
+assert '"chat": {"model": "claude-sonnet-5-5"}' in page and "sk-test" not in page, page[-300:]
+assert 'capabilities={"sample": {}}' in out and "key found in $ANTHROPIC_API_KEY" in out, out
 print("site ok")
+
+# chat: mtk serve answers through the API with the key from a folder file (mock API), never serves dotfiles,
+# and is off without a key
+import socket, urllib.request, urllib.error, time, mock_anthropic
+api = mock_anthropic.start()
+
+
+def serve(env):
+    with socket.socket() as sk:
+        sk.bind(("127.0.0.1", 0))
+        port = sk.getsockname()[1]
+    proc = subprocess.Popen(["mtk", "serve", "--dir", str(pub), "--port", str(port)], env=env, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True)
+    for _ in range(100):
+        try:
+            return proc, f"http://127.0.0.1:{port}", json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/api/chat"))
+        except OSError:
+            time.sleep(0.1)
+    proc.kill()
+    raise AssertionError(proc.stdout.read())
+
+
+def post(base, body):
+    req = urllib.request.Request(base + "/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, r.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+(pub / ".anthropic_api_key").write_text("sk-test-file\n")
+proc, base, info = serve({**nokey, "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{api.server_port}",
+                          "ANTHROPIC_WORKSPACE_ID": "wrkspc_test"})
+try:
+    assert info == {"enabled": True, "model": "claude-sonnet-5-5"}, info
+    try:
+        urllib.request.urlopen(base + "/.anthropic_api_key")
+        raise AssertionError("served the key file")
+    except urllib.error.HTTPError as e:
+        assert e.code == 404
+    ask = {"system": "TRANSCRIPT\n[0:01] One two.", "messages": [{"role": "user", "content": "Why?"}]}
+    assert post(base, ask) == (200, "".join(mock_anthropic.ANSWER))
+    headers, body = mock_anthropic.requests[-1]
+    headers = {k.lower(): v for k, v in headers.items()}
+    key = headers.get("x-api-key") or headers.get("authorization", "").removeprefix("Bearer ")
+    assert key == "sk-test-file" and headers["anthropic-workspace-id"] == "wrkspc_test", headers
+    assert "server-side-fallback-2026-07-01" in headers["anthropic-beta"], headers
+    assert body["model"] == "claude-sonnet-5-5" and body["fallbacks"] == "default" and body["stream"], body
+    assert body["system"][0]["cache_control"] == {"type": "ephemeral"} and body["messages"] == ask["messages"], body
+    bad = {"system": "x", "messages": [{"role": "assistant", "content": "hi"}]}
+    assert post(base, bad)[0] == 400 and len(mock_anthropic.requests) == 1
+finally:
+    proc.kill()
+(pub / ".anthropic_api_key").unlink()
+proc, base, info = serve(nokey)
+try:
+    assert info["enabled"] is False and post(base, ask)[0] == 403, info
+finally:
+    proc.kill()
+api.shutdown()
+print("chat ok")
 
 
 # guide: checkpoint times survive render -> episodes; mtk guide compiles and crops; mtk site embeds both

@@ -158,7 +158,16 @@ captions and a clickable transcript built in, resume where you left off, episode
 j k l n p c) next to copies of the videos, and prints the publish plan: Artifact publish with `file_path` that
 `index.html` and `files` = batch 1, then each later batch to the same url (64 MB per publish, 15 MB per file).
 With a guide, the page pauses the video at every checkpoint and shows that checkpoint's problem from the PDF;
-publish it with `capabilities: {"downloads": true}` so viewers can save the guide. Its
+publish it with `capabilities: {"downloads": true}` so viewers can save the guide.
+**Chat under each video** comes on by itself when an Anthropic API key is found (`$ANTHROPIC_API_KEY`, else a
+`.anthropic_api_key` file in the project folder, else `~/.anthropic_api_key`; `mtk site` prints `chat: on` or
+`off`; no key, no chat box). Viewers ask a question and Claude (Sonnet) answers from that video's transcript,
+chapters and checkpoints, with `[m:ss]` links that jump the video, and only hints for checkpoints not yet done. To
+use it locally, run `mtk serve` in the project: it serves `web/` on http://127.0.0.1:8000 and answers with the key,
+server-side. A key that isn't scoped to a workspace (`sk-ant-usr…`) also needs `$ANTHROPIC_WORKSPACE_ID` or a
+`.anthropic_workspace_id` file in the same places. Published, the page uses each viewer's own claude.ai account:
+pass the capabilities the plan prints (`"sample": {}`). Never print, Read or publish a key file. `mtk site` never
+puts the key in the page and `mtk serve` never serves dotfiles; keep `.anthropic_*` files out of `files`. Its
 player is the one to use for any video page: Chromium can't seek videos served without byte ranges (the artifact
 file server), and the player works around it (it fetches the full file and switches to it, with every seek waiting
 for it instead of snapping to 0). Test it locally with `python3 <repo>/tests/serve.py <folder> 8765 --kbps 800`
@@ -189,5 +198,5 @@ render so its timestamps match.
 ## 8. Deliver
 
 Tell the user the video path and length, the chapter list, the problem-set or guide PDF path, the site's link if
-you published one, and the timestamp of the mind-blow moment if there is one (or one line on why none fit). Share the files (SendUserFile if available).
+you published one (and `mtk serve` for the local site with chat, if chat is on), and the timestamp of the mind-blow moment if there is one (or one line on why none fit). Share the files (SendUserFile if available).
 Say plainly anything that isn't right yet.
