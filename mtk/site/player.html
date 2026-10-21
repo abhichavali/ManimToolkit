@@ -109,6 +109,13 @@ details.tx summary { cursor: pointer; font: 600 14px/1.2 var(--body); color: var
 .guide { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--hair); border-radius: 8px; }
 .guide h3 { margin: 0; }
 .guide p { margin: 0; color: var(--ink2); font-size: 14px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.tabs button { font: 600 15px/1.2 var(--body); padding: 9px 18px; border-radius: 999px; border: 1px solid var(--hair);
+  background: none; color: var(--ink2); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.subj { display: grid; gap: 8px; }
+.subj p { margin: 0; color: var(--ink2); font-size: 14px; }
+.subj a { color: var(--accent); font-size: 14px; }
 .switch { display: flex; gap: 8px; align-items: center; color: var(--ink2); font-size: 14px; cursor: pointer; }
 .switch input { accent-color: var(--gold); width: 16px; height: 16px; margin: 0; }
 [hidden] { display: none !important; }  /* .cp etc. set display, which would otherwise beat the hidden attribute */
@@ -122,6 +129,7 @@ details.tx summary { cursor: pointer; font: 600 14px/1.2 var(--body); color: var
     <p class="blurb" id="blurb"></p>
     <div class="bar" aria-hidden="true"><i style="background:var(--sky)"></i><i style="background:var(--ember)"></i><i style="background:var(--mint)"></i><i style="background:var(--lilac)"></i><i style="background:var(--gold)"></i><i style="background:var(--rose)"></i></div>
     <p class="meta" id="meta"></p>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Subjects" hidden></nav>
   </header>
   <main class="layout">
     <section class="stage" aria-label="Player">
@@ -141,7 +149,9 @@ details.tx summary { cursor: pointer; font: 600 14px/1.2 var(--body); color: var
 <script type="application/json" id="data">/*DATA*/</script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const VIDS = D.videos || [];
+const ALL = D.videos || [];
+const SUBJ = D.subjects || [];  // mtk site --subjects: one tab per project; videos carry their subject's slug
+let tab = null, VIDS = ALL;
 const $ = s => document.querySelector(s);
 const v = $('#v');
 const HUES = ['--sky', '--ember', '--mint', '--lilac', '--gold', '--rose'];
@@ -153,7 +163,8 @@ const store = {  // per-viewer conveniences only: where you left off, what you'v
   set(k, x) { try { localStorage.setItem(KEY + k, JSON.stringify(x)); } catch (e) { } },
 };
 const KINDS = { episode: 'Episodes', problem: 'Problems' };
-const G = D.guide || null;  // mtk guide: {pdf, checkpoints: {id: {page, img}}}
+const guideOf = e => (e && e.guide) || null;  // mtk guide: each video's {pdf, pages, checkpoints: {id: {page, img}}}
+const sk = k => tab ? `${k}:${tab}` : k;  // per-subject keys: checkpoint ids and 'last' repeat across subjects
 let cpOpen = null, prevT = 0, dl = null;
 const label = e => `${e.kind === 'problem' ? 'Problem' : 'Episode'} ${e.n}`;
 
@@ -312,18 +323,19 @@ function seek(t) { jump(t, true); }
 
 /* ---------------- checkpoints: the video pauses so the viewer works the guide ---------------- */
 const cpList = e => (e && e.checkpoints) || [];
-const isDone = id => !!store.get('done:' + id, false);
+const isDone = id => !!store.get(sk('done:' + id), false);
 const autoPause = () => store.get('autopause', true);
 function saveBtn() {
+  const G = guideOf(cur);
   if (!G) return '';
-  if (dl) return '<button class="btn" type="button" data-act="save">Save the guide (PDF)</button>';
-  if (!window.claude) return `<a class="btn" href="${esc(G.pdf)}" target="_blank" rel="noopener">Open the guide (PDF)</a>`;
+  if (dl) return '<button class="btn" type="button" data-act="save">Save this video\u2019s guide (PDF)</button>';
+  if (!window.claude) return `<a class="btn" href="${esc(G.pdf)}" target="_blank" rel="noopener">Open this video\u2019s guide (PDF)</a>`;
   return '';  // inside claude.ai without the downloads capability: a file link wouldn't work
 }
 function openCheckpoint(c) {
   cpOpen = c;
   v.pause();
-  const g = G && G.checkpoints && G.checkpoints[c.id];
+  const G = guideOf(cur), g = G && G.checkpoints && G.checkpoints[c.id];
   $('#cp').innerHTML = `<p class="eyebrow">Your turn · Checkpoint ${esc(c.id)}</p><h3>${esc(c.prompt)}</h3>
     ${g ? `<figure class="page"><img src="${esc(g.img)}" alt="Checkpoint ${esc(c.id)} as printed in the guide: ${esc(c.prompt)}"></figure>
       <p class="where">Page ${g.page} of your guide. Work it there, then come back: the video shows the answer next.</p>`
@@ -336,7 +348,7 @@ function openCheckpoint(c) {
 }
 function closeCheckpoint(done) {
   if (!cpOpen) return;
-  if (done) store.set('done:' + cpOpen.id, true);
+  if (done) store.set(sk('done:' + cpOpen.id), true);
   cpOpen = null;
   $('#cp').hidden = true;
   overlay(null);
@@ -347,8 +359,8 @@ function closeCheckpoint(done) {
 async function saveGuide(btn) {
   btn.disabled = true;
   try {
-    const blob = await (await fetch(G.pdf)).blob();
-    await dl.save({ filename: `${(D.title || 'Study').replace(/[^\w .-]+/g, '').trim() || 'Study'} guide.pdf`, data: blob });
+    const blob = await (await fetch(guideOf(cur).pdf)).blob();
+    await dl.save({ filename: `${(cur.title || D.title || 'Study').replace(/[^\w .-]+/g, '').trim() || 'Study'} guide.pdf`, data: blob });
     btn.textContent = 'Saved';
   } catch (e) {
     btn.textContent = e && e.code === 'declined' ? 'Save the guide (PDF)' : 'Saving isn\u2019t available here';
@@ -358,10 +370,13 @@ async function saveGuide(btn) {
 function renderShelf() {
   const kinds = [...new Set(VIDS.map(e => e.kind))];
   const all = VIDS.flatMap(cpList);
+  const S = SUBJ.find(x => x.slug === tab);
+  const subj = S && (S.blurb || (S.links || []).length) ? `<section class="subj"><h3>${esc(S.name)}</h3>${S.blurb ? `<p>${esc(S.blurb)}</p>` : ''}
+    ${(S.links || []).map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title)} \u2197</a>`).join('')}</section>` : '';
   const guide = all.length ? `<section class="guide"><h3>Your guide</h3>
-    <p>${all.filter(c => isDone(c.id)).length} of ${all.length} checkpoints done</p>${saveBtn()}
+    <p>${all.filter(c => isDone(c.id)).length} of ${all.length} checkpoints done${SUBJ.length ? ' in ' + esc(S ? S.name : '') : ''}</p>${saveBtn()}
     <label class="switch"><input type="checkbox" id="autopause"${autoPause() ? ' checked' : ''}> Pause at checkpoints</label></section>` : '';
-  $('#shelf').innerHTML = guide + kinds.map(k => `<section><h3>${esc(KINDS[k] || k)}</h3><ul>${VIDS.filter(e => e.kind === k).map(e => {
+  $('#shelf').innerHTML = subj + guide + kinds.map(k => `<section><h3>${esc(KINDS[k] || k)}</h3><ul>${VIDS.filter(e => e.kind === k).map(e => {
     const seen = Math.min(1, store.get('seen:' + e.stem, 0));
     return `<li><button class="card" type="button" data-stem="${esc(e.stem)}"${cur && cur.stem === e.stem ? ' aria-current="true"' : ''}>
       <span class="thumb">${e.poster ? `<img src="${esc(e.poster)}" alt="" loading="lazy">` : ''}<span class="dur">${fmt(e.duration)}</span>
@@ -400,10 +415,14 @@ function loadTranscript() {
 
 function open(stem, t, play) {
   const e = VIDS.find(x => x.stem === stem) || VIDS[0];
-  if (!e) { $('#nowtitle').textContent = 'No videos yet'; return; }
+  if (!e) {
+    closeCheckpoint(false); cur = null; v.removeAttribute('src'); v.load(); overlay(null);
+    $('#nowmeta').textContent = ''; $('#nowsub').hidden = true; $('#tl').innerHTML = ''; $('#ch').innerHTML = '';
+    $('#nowtitle').textContent = 'No videos here yet'; renderShelf(); return;
+  }
   const same = cur && cur.stem === e.stem;
   cur = e;
-  store.set('last', e.stem);
+  store.set(sk('last'), e.stem);
   if (!same) {
     closeCheckpoint(false);
     prevT = 0;
@@ -514,10 +533,28 @@ document.addEventListener('keydown', ev => {
   else return;
   ev.preventDefault();
 });
-function fromHash() {  // #ep02 opens episode 2; #ep02.83 opens it at 1:23
-  const m = location.hash.match(/^#([a-z]+\d+)(?:\.(\d+))?$/i);
-  if (m && VIDS.some(e => e.stem === m[1])) { open(m[1], m[2] ? +m[2] : null, false); return true; }
-  return false;
+function fromHash() {  // #ep02 opens episode 2; #ep02.83 opens it at 1:23 (with subjects: #physics-ep02)
+  const m = location.hash.match(/^#([a-z][\w-]*?\d+)(?:\.(\d+))?$/i);
+  const e = m && ALL.find(x => x.stem === m[1]);
+  if (!e) return false;
+  if (e.subject && e.subject !== tab) setTab(e.subject, true);
+  open(m[1], m[2] ? +m[2] : null, false);
+  return true;
+}
+function setTab(slug, quiet) {  // quiet: the caller opens a video itself
+  tab = slug;
+  VIDS = ALL.filter(e => e.subject === slug);
+  store.set('tab', slug);
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === slug)));
+  meta();
+  if (!quiet) open(store.get(sk('last'), VIDS[0] && VIDS[0].stem), null, false);
+}
+function meta() {
+  const mins = VIDS.reduce((a, e) => a + (e.duration || 0), 0) / 60;
+  const count = k => VIDS.filter(e => e.kind === k).length;
+  $('#meta').textContent = [count('episode') && `${count('episode')} episode${count('episode') > 1 ? 's' : ''}`,
+    count('problem') && `${count('problem')} problem walkthrough${count('problem') > 1 ? 's' : ''}`,
+    `${Math.round(mins)} min`].filter(Boolean).join(' · ');
 }
 window.addEventListener('hashchange', fromHash);
 
@@ -526,14 +563,16 @@ $('#kicker').hidden = !D.kicker;
 $('#title').textContent = D.heading || D.title || '';
 $('#blurb').textContent = D.blurb || '';
 $('#blurb').hidden = !D.blurb;
-const mins = VIDS.reduce((a, e) => a + (e.duration || 0), 0) / 60;
-const count = k => VIDS.filter(e => e.kind === k).length;
-$('#meta').textContent = [count('episode') && `${count('episode')} episode${count('episode') > 1 ? 's' : ''}`,
-  count('problem') && `${count('problem')} problem walkthrough${count('problem') > 1 ? 's' : ''}`,
-  `${Math.round(mins)} min`].filter(Boolean).join(' · ');
 wire();
-if (G && window.claude && window.claude.use) {  // the downloads capability: Save the guide
+if (SUBJ.length) {
+  $('#tabs').hidden = false;
+  $('#tabs').innerHTML = SUBJ.map(x => `<button type="button" role="tab" data-tab="${esc(x.slug)}" aria-selected="false">${esc(x.name)}</button>`).join('');
+  $('#tabs').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b && b.dataset.tab !== tab) setTab(b.dataset.tab); });
+  const saved = store.get('tab', null);
+  setTab(SUBJ.some(x => x.slug === saved) ? saved : SUBJ[0].slug, true);
+} else meta();
+if (ALL.some(guideOf) && window.claude && window.claude.use) {  // the downloads capability: Save the guide
   window.claude.use('downloads').then(x => { dl = x; renderShelf(); if (cpOpen) openCheckpoint(cpOpen); }).catch(() => { });
 }
-if (!fromHash()) open(store.get('last', VIDS[0] && VIDS[0].stem), null, false);
+if (!fromHash()) open(store.get(sk('last'), VIDS[0] && VIDS[0].stem), null, false);
 </script>

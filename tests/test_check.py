@@ -115,5 +115,6 @@ assert gj["checkpoints"]["1.1"]["page"] == 1 and 20 < crop.height < 400, (gj, cr
 subprocess.run(["mtk", "site"], cwd=g, capture_output=True, text=True, check=True)
 page = (g / "web/index.html").read_text()
 data = json.loads(re.search(r'id="data">(.*?)</script>', page, re.S).group(1).replace("<\\/", "</"))
-assert data["guide"]["checkpoints"]["1.1"]["img"] == "cp-1.1.png" and data["videos"][0]["checkpoints"][0]["id"] == "1.1"
+v0 = data["videos"][0]  # each video carries its own guide (one guide.tex, or guide-ep01.tex per video)
+assert v0["guide"]["checkpoints"]["1.1"]["img"] == "cp-1.1.png" and v0["checkpoints"][0]["id"] == "1.1", v0
 print("guide ok")

@@ -498,7 +498,7 @@ def episodes(a):
         total = dur(full)
         cap = min(a.max_mb, a.mb_per_min * total / 60 if a.mb_per_min else a.max_mb) * 1e6
         web = Path("web") / f"{g['stem']}.mp4"
-        for crf in (22, 24, 26, 28, 30, 32, 34, 36):
+        for crf in [c for c in (22, 24, 26, 28, 30, 32, 34, 36) if c >= a.crf]:
             subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", str(full), "-c:v", "libx264",
                             "-preset", "slow", "-tune", "animation", "-crf", str(crf), "-pix_fmt", "yuv420p",
                             "-c:a", "aac", "-b:a", "64k", "-ac", "1", "-movflags", "+faststart", str(web)], check=True)
@@ -532,13 +532,16 @@ def guide(a):
         shutil.copy(pkg / "guide.tex", src)
         sys.exit(f"wrote {src} from the template: fill it in (the skill's guide.md has the rules), then run mtk guide")
     vids = json.loads(Path("web/episodes.json").read_text()) if Path("web/episodes.json").exists() else []
-    many = sum(e["kind"] == "episode" for e in vids) > 1
-    times = {c["id"]: (f"Ep {e['n']}, " if many else "") + f"{int(c['t'] // 60)}:{int(c['t'] % 60):02d}"
-             for e in vids for c in e.get("checkpoints", [])}
     text = src.read_text()
     ids = re.findall(r"\\checkpoint(?:\[[^\]]*\])?\{([^}]*)\}", text)
-    for i in sorted(set(times) - set(ids)):
-        print(f"GUIDE checkpoint {i} is in the video but not in {src.name}")
+    owner = {c["id"]: e for e in vids for c in e.get("checkpoints", [])}
+    many = len({owner[i]["stem"] for i in ids if i in owner}) > 1  # "Ep N," only when this guide spans videos
+    times = {c["id"]: (f"{'Ep' if e['kind'] == 'episode' else 'Problem'} {e['n']}, " if many else "")
+             + f"{int(c['t'] // 60)}:{int(c['t'] % 60):02d}" for e in vids for c in e.get("checkpoints", [])}
+    name = src.stem  # guide.tex -> guide.pdf; one guide per video: guide-ep01.tex -> guide-ep01.pdf
+    if src.stem == "guide":  # one guide for the whole project: every video checkpoint belongs in it
+        for i in sorted(set(times) - set(ids)):
+            print(f"GUIDE checkpoint {i} is in the video but not in {src.name}")
     for i in ids:
         if i not in times:
             print(f"GUIDE checkpoint {i} is in {src.name} but not in the rendered video (its time shows ?:??)")
@@ -569,7 +572,7 @@ def guide(a):
         subprocess.run(["pdftoppm", "-r", str(dpi), "-png", "guide.pdf", "pg"], cwd=d, check=True)
         pages = sorted(d.glob("pg-*.png"), key=lambda q: int(q.stem.split("-")[1]))
         px = lambda pt: pt * dpi / 72.27  # TeX points -> pixels
-        info = {"pdf": "guide.pdf", "pages": len(pages), "checkpoints": {}}
+        info = {"pdf": f"{name}.pdf", "pages": len(pages), "checkpoints": {}}
         for i in ids:
             if (i, "top") not in pos or (i, "bot") not in pos:
                 continue
@@ -581,11 +584,11 @@ def guide(a):
                    min(im.height, int(px(lo)) + 6))
             im.crop(box).save(web / f"cp-{i}.png")
             info["checkpoints"][i] = {"page": pg, "img": f"cp-{i}.png"}
-        shutil.copy(d / "guide.pdf", web / "guide.pdf")
-    (web / "guide.json").write_text(json.dumps(info, indent=1))
+        shutil.copy(d / "guide.pdf", web / f"{name}.pdf")
+    (web / f"{name}.json").write_text(json.dumps(info, indent=1))
     Path("out").mkdir(exist_ok=True)
-    shutil.copy(web / "guide.pdf", Path("out") / "guide.pdf")
-    print(f"{(Path('out') / 'guide.pdf').resolve()}  {info['pages']} pages, {len(info['checkpoints'])} checkpoints "
+    shutil.copy(web / f"{name}.pdf", Path("out") / f"{name}.pdf")
+    print(f"{(Path('out') / f'{name}.pdf').resolve()}  {info['pages']} pages, {len(info['checkpoints'])} checkpoints "
           f"cropped for the site (web/cp-*.png); mtk site picks them up")
 
 
@@ -602,38 +605,77 @@ def _cues(text):
     return out
 
 
-def site(a):
-    import html as _html
-    web = Path("web")
-    if not (web / "episodes.json").exists():
-        sys.exit("no web/episodes.json here: run mtk episodes first")
+def _videos(web, slug=""):
+    """One project's videos for a page, from its web/: captions inlined (artifacts don't serve .vtt), each video's
+    guide attached (the guide*.json holding its checkpoints), and the files it needs as {published path: source}.
+    With a slug (a subject on a multi-subject page) stems get "<slug>-" and files "<slug>/", so projects never collide."""
     vids = json.loads((web / "episodes.json").read_text())
-    for e in vids:  # captions travel inside the page: artifacts don't serve .vtt, and it saves a request
+    guides = [json.loads(g.read_text()) for g in sorted(web.glob("guide*.json"))]
+    pre, files = f"{slug}/" if slug else "", {}
+    for e in vids:
         f = web / (e.get("captions") or "")
         e["cues"] = _cues(f.read_text()) if e.get("captions") and f.exists() else []
         e.pop("captions", None)
-    heading = a.title
-    if not heading and Path("BRIEF.md").exists():
+        ids = {c["id"] for c in e.get("checkpoints", [])}
+        g = next((g for g in guides if ids & set(g["checkpoints"])), None)
+        if g:
+            files[pre + g["pdf"]] = web / g["pdf"]
+            files.update({pre + c["img"]: web / c["img"] for c in g["checkpoints"].values()})
+            e["guide"] = dict(g, pdf=pre + g["pdf"],
+                              checkpoints={i: dict(c, img=pre + c["img"]) for i, c in g["checkpoints"].items()})
+        for k in ("file", "poster"):
+            if e.get(k):
+                files[pre + e[k]] = web / e[k]
+                e[k] = pre + e[k]
+        if slug:
+            e["subject"], e["stem"] = slug, f"{slug}-{e['stem']}"
+    return vids, files
+
+
+def site(a):
+    """The study page. One project: run in it (after mtk episodes). Several, as tabs: --subjects hub.json with
+    {"title", "kicker", "blurb", "subjects": [{"slug", "name", "dir", "blurb", "links": [{"title", "url"}]}]}."""
+    import html as _html
+    cfg, subjects = {}, None
+    if a.subjects:
+        cfg = json.loads(Path(a.subjects).expanduser().read_text())
+        vids, files, subjects = [], {}, []
+        for s in cfg["subjects"]:
+            web = Path(s["dir"]).expanduser() / "web"
+            if (web / "episodes.json").exists():
+                vs, fs = _videos(web, s["slug"])
+                vids += vs
+                files.update(fs)
+            else:
+                print(f"{s['name']}: no {web}/episodes.json yet (its tab says so)")
+            subjects.append({k: s[k] for k in ("slug", "name", "blurb", "links") if k in s})
+    else:
+        if not Path("web/episodes.json").exists():
+            sys.exit("no web/episodes.json here: run mtk episodes first (or pass --subjects)")
+        vids, files = _videos(Path("web"))
+    heading = a.title or cfg.get("title")
+    if not heading and not subjects and Path("BRIEF.md").exists():
         first = next((ln for ln in Path("BRIEF.md").read_text().splitlines() if re.match(r"^#\s+\S", ln)), "# ")
         heading = re.sub(r"\s*\(~?[\d.]+\s*min\)\s*$", "", first[1:].strip())
     heading = heading or Path.cwd().name
     name = heading.partition(":")[0]  # the page's name (its tab and gallery title) stops before an explainer colon
-    data = dict(title=name.strip(), heading=heading, kicker=a.kicker or "", blurb=a.blurb or "", videos=vids)
-    if (web / "guide.json").exists():  # mtk guide: the PDF and each checkpoint's crop
-        data["guide"] = json.loads((web / "guide.json").read_text())
+    data = dict(title=name.strip(), heading=heading, kicker=a.kicker or cfg.get("kicker", ""),
+                blurb=a.blurb or cfg.get("blurb", ""), videos=vids)
+    if subjects:
+        data["subjects"] = subjects
     tpl = (Path(importlib.util.find_spec("mtk").origin).parent / "site" / "player.html").read_text()
     page = tpl.replace("{{TITLE}}", _html.escape(name.strip())).replace(
         "/*DATA*/", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
-    out = Path(a.out).expanduser() if a.out else web
+    out = Path(a.out).expanduser() if a.out else (Path(a.subjects).expanduser().parent / "site" if a.subjects
+                                                   else Path("web"))
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(page)
-    files = [e[k] for e in vids for k in ("file", "poster") if e.get(k)]
-    if data.get("guide"):
-        files += [data["guide"]["pdf"]] + [c["img"] for c in data["guide"]["checkpoints"].values()]
-    for f in files:  # a separate publish folder (e.g. the scratchpad) gets its own copies
-        src, dst = web / f, out / f
+    for f, src in files.items():  # a separate publish folder (e.g. the scratchpad) gets its own copies
+        dst = out / f
+        dst.parent.mkdir(parents=True, exist_ok=True)
         if src.resolve() != dst.resolve() and (not dst.exists() or dst.stat().st_mtime < src.stat().st_mtime):
             shutil.copy2(src, dst)
+    guided = any(e.get("guide") for e in vids)
     print(f"{(out / 'index.html').resolve()}  ({len(vids)} videos, {sum((out / f).stat().st_size for f in files) / 1e6:.1f} MB)")
     batches, cur, size = [], {}, 0
     for f in files:  # one publish carries at most 64 MB: batch the files, all published to the same artifact
@@ -646,7 +688,7 @@ def site(a):
     batches.append(cur)
     print("publish: Artifact file_path=index.html (in that folder) with files=<batch 1>; later batches go to the "
           "same url with the same file_path" + ('; pass capabilities={"downloads": true} (Save the guide)'
-                                                if data.get("guide") else ""))
+                                                if guided else ""))
     for i, bt in enumerate(batches, 1):
         print(f"batch {i}: " + json.dumps(bt))
 
@@ -787,13 +829,15 @@ def main():
     c.add_argument("which", nargs="*", help="stems to build (ep03 p02 ...); default all")
     c.add_argument("-q", default="h", choices=QUAL, help="the render quality to join (default h = 1080p30)")
     c.add_argument("--max-mb", type=float, default=14.5, help="per-file cap (artifact files max out at 15 MB)")
+    c.add_argument("--crf", type=int, default=22, help="first x264 quality to try (higher = smaller; skips passes known to be too big)")
     c.add_argument("--mb-per-min", type=float, help="also cap at this many MB per minute (a site-wide budget)")
     c.set_defaults(fn=episodes)
     c = sub.add_parser("site")
     c.add_argument("--title", help="the page heading (default: the brief's title); its tab name stops at a colon")
     c.add_argument("--kicker", help="small line above the title, e.g. the course")
     c.add_argument("--blurb", help="one or two sentences under the title")
-    c.add_argument("--out", help="write index.html and copies of the videos here (default: web/)")
+    c.add_argument("--out", help="write index.html and copies of the videos here (default: web/, or site/ next to --subjects)")
+    c.add_argument("--subjects", help="hub.json: several projects on one page, one tab each (see site())")
     c.set_defaults(fn=site)
     c = sub.add_parser("guide")
     c.add_argument("tex", nargs="?", default="guide.tex")
