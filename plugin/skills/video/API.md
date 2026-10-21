@@ -105,6 +105,8 @@ only when the camera must fly through geometry). Camera `elev`/`azim` in degrees
 - `self.beat(text, *steps, w=None, style=None)`: steps share the clip; a number step is a pause **as a fraction of
   the clip** (`.2`), never seconds · `with self.say(text, style=None) as d:` (d = clip seconds)
 - `self.title_card(kicker, title, sub)` -> mobject · `self.section(text)` plays + returns the header
+- `self.spotlight(*mobs)` -> animation: a key moment; everything else dims and mobs glow (play it in that beat,
+  hold, then `self.unspot()` -> animation in the next; `wipe` also lifts it). Use it where the brief's `→` says.
 - `self.predict(question, narration, seconds=3)` pause-and-ponder card · `self.wipe()` · `self.drop(*mobs)`
 - `self.snap(label)` an extra storyboard still mid-beat · `self.lint_on = False` around a deliberate overlap
 - camera: `self.play(self.camera.frame.animate.scale(.4).move_to(p))`; deep zooms: `self.play(self.zoom_to(p, 600,
@@ -147,13 +149,15 @@ W01 walkthrough (Read, Solve, Trap). Copy the technique, not the scene.
 - **In a script-first brief the narration is final**: one quoted line = one `beat`/`say`, copied verbatim (a changed
   character costs a new voice call and drifts from the script). You may split a line at a sentence boundary when
   the picture needs two steps; never reword, add or drop words. Narration that seems wrong: say so in your report.
-- Writing narration (the coordinator, in the brief): ~125 words per finished minute (the voice reads ~150 wpm;
+- Writing narration (the coordinator, in the brief): ~110 words per finished minute (the voice reads ~140 wpm;
   pauses and motion fill the rest); 1-3 sentences per beat (4-20 s); write for the ear ("u-t equals u-x-x",
   "e to the minus n squared t", "two pi"), no `= + ^ _ \` or Unicode math; American spelling; conversational,
   confident, a little playful ("watch this", "here's the punchline"), never padded, no hype words.
-- Explain like a teacher talking a student through it: why before what, nothing used before it's explained,
-  every "so" with its reason, the crux said more than once. Never "clearly", "obviously", "it turns out" or
-  "it's easy to see": each one marks a step the viewer was asked to take on trust.
+- Explain like a teacher talking a student through it, 3Blue1Brown style: set up the question and where it's
+  headed, why before what, nothing used before it's explained, every "so" with its reason. Flag the 2-4 key
+  moments out loud ("pay close attention here", "this is the key step"), slow them down (`style="slower and
+  deliberate"`), and say each one again another way. Never "clearly", "obviously", "it turns out" or "it's easy
+  to see": each one marks a step the viewer was asked to take on trust.
 - Plain string literals in code, no f-strings: the audio cache keys on the exact text.
 
 ## Visual rules

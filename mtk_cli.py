@@ -275,6 +275,8 @@ def voice(a):
                    ("**Crux**", "the step(s) where understanding is won or lost; they get the most time")):
         if k not in head:
             print(f"BRIEF: no {k} line: {why}")
+    if not any("spotlight(" in ln for ln in ls if ln.strip().startswith(("→", "->"))):
+        print("BRIEF: no key moment: flag the crux out loud, slow it down, and spotlight it (→ self.spotlight(...))")
     cur = None
     for i, ln in enumerate(ls):  # every beat needs its picture line
         cur = HEAD.match(ln).group(1) if HEAD.match(ln) else cur
@@ -776,6 +778,8 @@ Picture: <layout and what's on screen overall; recipes to borrow (mtk recipe)>
    → <what the screen does during this beat>
 2. "<next beat>"
    → <...>
+3. "<a key moment: pay close attention here, because ...>" (style: slower and deliberate, stressing the key words)
+   → self.spotlight(<the one thing>); hold 2 s
 """
 
 WALK = """# <Course> · <exam> walkthroughs

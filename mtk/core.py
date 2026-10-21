@@ -222,7 +222,8 @@ def chip(name, color):
 TTS_URL = "https://openrouter.ai/api/v1/audio/speech"
 TTS_MODEL = "google/gemini-3.8-flash-tts"
 VOICE = "Puck"
-STYLE = "energetic, crystal-clear teacher; warm, curious, confident, conversational, brisk pace"
+STYLE = ("warm, clear teacher talking one-on-one with a curious student; conversational and thoughtful, unhurried, "
+         "with natural pauses; lets important sentences land")  # ~138 wpm; the old "brisk pace" read ~161
 RATE = 24000  # response is raw PCM s16le, mono, 24 kHz
 KEY_FILE = Path.home() / ".config/manim-explainer/openrouter_key"
 _QUOTA = {"out": False}
@@ -264,8 +265,9 @@ def _say_fallback(text, h):
 
 
 def tts(text, voice=None, style=None):
-    """Return (wav_path, seconds) for text, calling the API only on a cache miss."""
-    voice, style = voice or VOICE, style or STYLE
+    """Return (wav_path, seconds) for text, calling the API only on a cache miss. style adds to STYLE for this line
+    (a key moment: 'slower and deliberate, stressing the key words' reads ~122 wpm)."""
+    voice, style = voice or VOICE, f"{STYLE}; for this line: {style}" if style else STYLE
     h = hashlib.sha1(f"{TTS_MODEL}|{voice}|{style}|{text}".encode()).hexdigest()[:16]
     path = audio_dir() / f"{h}.wav"
     if os.environ.get("MTK_TTS") == "say":  # offline/free draft voice (tests); never ship it
@@ -483,7 +485,7 @@ class Narrated:
 
     @contextmanager
     def say(self, text, style=None):
-        """style overrides the delivery for this line only (e.g. 'slow, quiet, awed' for a reveal)."""
+        """style adds a delivery note for this line only (e.g. 'slower and deliberate' for a key moment)."""
         n = len(text.split())
         gap = self.time - getattr(self, "_said_until", 0.0)
         if gap > QUIET and self.lint_on:
@@ -537,6 +539,32 @@ class Narrated:
         if self.mobjects:
             self.snap()
             self.drop(*self.mobjects, run_time=run_time)
+        if getattr(self, "_spot", None):  # a spotlight still up goes with everything else
+            self.lint_on, self._spot = True, None
+
+    def spotlight(self, *mobs, color=None):
+        """The key moment ("pay close attention here"): everything else dims under a scrim and mobs glow above it.
+        Returns the animation for that beat; hold it, then play self.unspot() (wipe also lifts it). 2D scenes."""
+        c, w, _ = self._frame()
+        scrim = FullScreenRectangle(stroke_width=0, fill_color=BG, fill_opacity=0.78)
+        scrim.scale(w / config.frame_width).move_to(c).set_z_index(89)
+        z = [(x, x.z_index) for m in mobs for x in m.get_family()]
+        for m in mobs:
+            m.set_z_index(90)
+        glows = [glow(m, color) for m in mobs]  # m above its halo, the halo above the scrim
+        self._spot = (scrim, glows, z)
+        self.lint_on = False  # the scrim covers the rest on purpose
+        return AnimationGroup(FadeIn(scrim), *[FadeIn(g) for g in glows])
+
+    def unspot(self):
+        """Animation that lifts the spotlight; play it in the beat that moves on."""
+        scrim, glows, z = self._spot
+
+        def undo():
+            for x, k in z:
+                x.z_index = k
+            self.lint_on, self._spot = True, None
+        return _Lift(FadeOut(scrim), *[FadeOut(g) for g in glows], undo=undo)
 
     def drop(self, *mobs, run_time=0.6):
         for m in mobs:
@@ -615,6 +643,18 @@ class Narrated:
     def try_it(self, seconds=2.5):
         """The walkthrough pause: 'Try it before we solve it.'"""
         self.predict("Try it before we solve it.", "Pause here and give it a try.", seconds=seconds)
+
+
+class _Lift(AnimationGroup):
+    """An AnimationGroup that calls undo() once it has played (z-indices go back only after the scrim is gone)."""
+
+    def __init__(self, *anims, undo, **kw):
+        super().__init__(*anims, **kw)
+        self.undo = undo
+
+    def clean_up_from_scene(self, scene):
+        super().clean_up_from_scene(scene)
+        self.undo()
 
 
 class VScene(Narrated, MovingCameraScene):

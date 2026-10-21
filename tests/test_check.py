@@ -11,6 +11,8 @@ for want in ["0 warnings 1 checkpoints", "DRIFT q: SKY in S06; EMBER in S07", "p
              "'tiny' renders at font size 12", "picture frozen for", "narration contains =", "budget 20",
              "S04_Clean", "media/board/lint_cases.S04_Clean.png"]:
     assert want in out, want
+spot = next(ln for ln in out.splitlines() if ln.startswith("lint_cases S10_Spotlight"))
+assert "0 warnings" in spot and "3 beats" in spot, spot
 clean = next(ln for ln in out.splitlines() if ln.startswith("lint_cases S04_Clean"))
 assert "0 warnings" in clean and "2 beats" not in clean, clean
 assert (here / "media/board/lint_cases.S04_Clean.png").exists()

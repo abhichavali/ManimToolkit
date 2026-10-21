@@ -72,3 +72,15 @@ class S09_Checkpoint(VScene):
         self.checkpoint("1.1", "Find the radius")
         self.beat("The radius is one.", Indicate(Circle()))
         self.wipe()
+
+
+class S10_Spotlight(VScene):
+    def construct(self):
+        a, b = Square(), Circle().shift(RIGHT * 3)
+        self.beat("Here are two shapes, a square and a circle.", FadeIn(a), FadeIn(b))
+        self.beat("Pay close attention to the circle, because this is the key step.", self.spotlight(b))
+        assert b.z_index == 91 and not self.lint_on
+        self.beat("Now we step back and look at both of them again.", self.unspot())
+        assert b.z_index == 0 and a.z_index == 0 and self.lint_on, (a.z_index, b.z_index)
+        assert not any(isinstance(m, (FullScreenRectangle, VGroup)) for m in self.mobjects), self.mobjects  # scrim, halos gone
+        self.wipe()

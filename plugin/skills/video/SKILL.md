@@ -98,6 +98,8 @@ Picture: one or two lines: the layout and what's on screen overall; recipes to b
    → what the screen does during this beat
 2. "Next beat."
    → ...
+3. "Pay close attention here, because this is the whole trick: ..." (style: slower and deliberate, stressing the key words)
+   → self.spotlight(eq[2]); hold 2 s
 
 ## S02_<Name> [<words>] <chapter label>
 ...
@@ -111,42 +113,70 @@ episode from these headings. Text after `[budget]` becomes the scene's chapter l
   doubles it.
 - `[N]` in a scene heading is its narration word budget. Scenes of 30 to 90 s, each one idea; a scene is one
   agent's job, so more scenes means more parallelism.
-- Budget ~120 narration words per finished minute, ~105 in crux scenes; follow API.md's narration rules. Beats can
-  carry `(style: slower, quieter, a little awed)` after the quote for a reveal.
-
-**Explain it the way a good teacher would, out loud.** The failure to avoid is narration that is correct but
-compressed: it names the idea, states the result and moves on, and the viewer is left to infer the rest. A
-viewer who knows only the Knows line must be able to follow every beat without pausing to reconstruct a step.
-- **Time goes where the difficulty is.** Core rungs get at least half the runtime, and each crux step gets its own
-  scene. Support gets what the core needs and no more. Asides get a sentence or are cut: history, side results,
-  generalizations, "fun facts". The Ladder's times add up to the target before you write a beat; if they don't
-  fit, cut rungs, never squeeze them.
-- **Why before what.** Before any definition, operation or step, the viewer knows what it's for: "we want Y; the
-  obvious try fails because ...; so here's X". Never just "now define X".
-- **Nothing used before it's explained.** Each term, symbol or fact not in Knows is said in plain words and shown
-  on the example, and only then named. One new term per beat at most.
-- **Show every step.** Each "so", "which means" or "therefore" has its reason in the words or on screen. Name the
-  rule a step uses. Wherever a viewer could ask "wait, why?", the next beat answers it. Don't read an equation
-  aloud as its explanation: say what it means, then build the symbols piece by piece.
-- **Introduce, use, land.** After a new idea, use it once on the concrete example before the next one arrives,
-  then say in a sentence what we now have. Open each section with where we are and what's missing ("we can do X;
-  what we can't do yet is Y"), so the viewer always knows why this step is happening.
-- **At the crux, slow down and say it more than once**: the plain-words version, the worked example, the general
-  statement, then "in other words" in one sentence. Name the misconception and show it failing. That repetition is
-  teaching, not padding.
-- **Concrete first, all the way through.** Trace one example with real numbers through every step before the
-  general symbols, and keep it on screen as the anchor.
-- **Room to think.** After a key reveal, hold the picture with nothing new (`→ ... then hold 2 s`). Put predict
-  beats before the answers they set up.
+- Budget ~110 narration words per finished minute, ~95 in crux scenes: the voice reads ~140 wpm (~120 on a key
+  line), and pictures, holds and spotlights fill the rest. Follow API.md's narration rules. A beat can carry
+  `(style: ...)` after the quote, a delivery note for that line ("slower and deliberate, stressing the key
+  words"; "quieter, a little awed" for a reveal).
+- 2 to 4 key moments (see Emphasis below), each with a `→ self.spotlight(...)` line.
 - For each key idea, ask "what picture makes this obvious?" before "what equation states it?", and say it in
   the `→` lines: concrete enough that the scene agent doesn't have to invent the explanation, loose enough to
   leave it the layout.
+
 - 2 to 4 predict beats (`→ self.predict("question", <this line>)`); end major sections with a key_box.
 - With `--guide`: a checkpoint every 3 to 4 minutes, just before a reveal: the cue beat, its
   `→ self.checkpoint("1.2", "short prompt")` line, then the reveal beat (`guide.md`). Write `guide.tex` alongside
   the brief, with every answer verified.
 - With `--mind-blow`: candidates, the chosen moment (or why none fits), and its plant and reveal beats.
 - Scene writers never open the source: every fact they need is in the brief.
+
+**Teach it like 3Blue1Brown: a teacher talking one student through it.** The failure to avoid is narration that
+is correct but compressed: it names an idea, states the result and moves on, every beat at the same speed and
+weight, and leaves the viewer to infer the steps and to guess what mattered. A viewer who knows only the Knows line
+must follow every beat without stopping to rebuild a step, and must always know which moments matter most.
+
+*Setup.*
+- Open on the hook, then set it up properly: the question stated precisely, what we're given, and where we're
+  headed ("here's the plan: first ..., then ..., and that will explain ..."). If the crux leans on something in
+  Knows, remind them of it in a sentence or two, right before it's needed.
+- Why before what: before any definition, operation or step, the viewer knows what it's for ("we want Y; the
+  obvious try fails because ...; so here's X"). Let them discover it, with the natural first guess, why it fails,
+  and the fix, so they feel they could have invented it.
+
+*Exposition.*
+- **Time goes where the difficulty is.** Core rungs get at least half the runtime, and each crux step gets its own
+  scene. Support gets what the core needs. Asides get a sentence or are cut: history, side results,
+  generalizations. The Ladder's times add up to the target before you write a beat; if they don't fit, cut rungs,
+  never squeeze them.
+- **Concrete first, all the way through.** Trace one example with real numbers through every step before the
+  general symbols, and keep it on screen as the anchor.
+- **Nothing used before it's explained.** Each term, symbol or fact not in Knows is said in plain words and shown
+  on the example, and only then named. One new term per beat at most.
+- **Show every step.** Each "so", "which means" or "therefore" has its reason in the words or on screen. Name the
+  rule a step uses. Wherever a viewer could ask "wait, why?", the next beat answers it. Don't read an equation
+  aloud as its explanation: say what it means, then build it piece by piece, each symbol tied to the picture.
+- **Introduce, use, land.** After a new idea, use it once on the example, then say in a sentence what we now have.
+  Open each section with where we are and what's missing ("we can do X; what we can't do yet is Y").
+- **Talk to them.** Use the second person, and think out loud together: "you might be wondering ...", "let's just
+  try it", "if this feels strange, good: it should". Say where it's genuinely hard. When you skip something, say
+  so plainly ("I'll skip the proof; the idea is ...").
+
+*Emphasis and pacing.*
+- **Tell the viewer what matters.** Mark the 2 to 4 key moments out loud: "pay close attention here", "this is
+  the key step", "this part is subtle, so let's go slowly", "if you remember one thing from this video, make it
+  this". Reserve these phrases for the crux, so they keep their force. Elsewhere, plain signposts ("next",
+  "here's the catch").
+- **A key moment slows down in three ways at once:**
+  - the voice: the line carries `(style: slower and deliberate, stressing the key words)`;
+  - the picture: it spotlights the one thing, then holds (`→ self.spotlight(eq[2]); hold 2 s`);
+  - the words: the next beat says it again another way ("in other words, ...").
+
+  Show the tempting wrong intuition failing right there.
+- **Vary the pace.** Move briskly through what they already know and slow down at the crux. Put a breather (an
+  example or a recap) between two hard ideas, and silence after a reveal. Predict beats go before the answers they
+  set up.
+
+*Landing.* At the end of each section and of the video, step back ("so, stepping back: ..."). Give the key idea in
+one sentence, answer the hook, and say why it matters.
 
 **Read it as the viewer, before any scene exists.** You know the topic too well to see the gaps yourself. When the
 brief is drafted, spawn one fresh general-purpose agent (`model: "opus"`, `effort: "medium"`) with this prompt,
@@ -157,16 +187,19 @@ verbatim:
 > every place where you would: meet a term, symbol or fact you don't know that hasn't been explained yet (gap);
 > be told a conclusion without seeing why (why); have to fill in a step the video skipped (jump); get two new
 > ideas at once, or a new one before the last was used (dense); lose track of why the video is doing what it's
-> doing (lost); want it to slow down, show it again or give an example (slow); or sit through something that
+> doing, or where it's headed (lost); want it to slow down, show it again or give an example (slow); see a key
+> point go by without being flagged as important or given time to land (flat); or sit through something that
 > doesn't serve the main idea (cut). Don't fill gaps from your own expertise: if the viewer would be confused,
 > say so. Then, as a teacher: state the video's main idea in one sentence from the script alone, name the beats
-> where it's won or lost and whether they get enough time, and say what you'd cut to pay for it. Report at most
+> where it's won or lost, whether they get enough time and are flagged as the key moments, and say what you'd cut
+> to pay for it. Judge it against a great 3Blue1Brown lesson: does it set up the question, build it from a
+> concrete case, and land it? Report at most
 > 30 lines, most important first, each `S03.2 [jump] what's missing → the sentence or picture that fixes it`.
 
 Meanwhile run `cd "$P" && mtk voice BRIEF.md`. It voices every line in parallel (the scene checks later find them
 cached) and prints each scene's length against its `[budget]`. It also flags:
 - beats with no `→` line, and scenes with no budget;
-- a missing `colors(`, `**Knows**` or `**Crux**` line;
+- a missing `colors(`, `**Knows**` or `**Crux**` line, or no `self.spotlight` key moment;
 - hand-waves ("clearly", "it turns out", "it's easy to see");
 - beats too dense to follow.
 
@@ -202,7 +235,8 @@ waves of ~10 to stay clear of usage limits.
   parallel on global render slots), and review while it runs.
 - `mtk check` (fast: everything is cached) for the lint lines and lengths, then read every storyboard once,
   all in one message with parallel Reads (`media/board/*.png`: a still per beat, captioned with its narration). Is each idea obvious from the picture?
-  Does each algebra step happen on screen one at a time, rather than several in one morph?
+  Does each algebra step happen on screen one at a time, rather than several in one morph? Do the key moments
+  spotlight the one thing and hold?
   Does every beat show what its words say? Anything cluttered, static, off-palette? Is the rigor all there?
   Continuity across scenes (notation, colors, callbacks)? A `DRIFT` line means a concept changes color between
   scenes: send it to the scenes' agents.

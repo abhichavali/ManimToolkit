@@ -207,3 +207,21 @@ viewer to infer the step in between. The skill now treats explanation as its own
 - a side fact (the eigenvalue of φ²) took time the core needed.
 
 Each finding came with the sentence or picture that fixes it.
+
+**Taught like 3Blue1Brown.** The narration rules now cover:
+- **Setup:** the question stated precisely, and where the video is headed.
+- **Discovery:** the natural first guess, why it fails, then the fix.
+- **Talking to the viewer:** second person, thinking out loud together.
+- **Landing:** stepping back at the end of each section.
+
+Two to four key moments per video are flagged out loud ("pay close attention here", "this is the key step") and
+slowed down in three ways:
+- **The voice:** a per-line delivery note.
+- **The picture:** `self.spotlight(*mobs)` dims everything else and haloes the one thing, then holds;
+  `self.unspot()` lifts it.
+- **The words:** the next beat says it again another way.
+
+The default voice is now a calm, unhurried teacher instead of a "brisk" one. On the same line, the old style read
+161 words a minute, the new one 138, and the new one with a key-moment note 122. A line's `(style: ...)` now adds to
+the default instead of replacing it. Because of that, re-rendering an older project voices its narration again.
+`mtk voice` flags a script with no spotlighted key moment, and the cold read flags key points that go by "flat".
