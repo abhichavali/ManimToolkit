@@ -130,6 +130,9 @@ W01 walkthrough (Read, Solve, Trap). Copy the technique, not the scene.
 - **Open on a question**, a concrete puzzle or surprising picture in the first 20 s, not a definition.
 - **Discover, don't declare**: the naive attempt, why it fails, the fix. The viewer should feel they could have invented it.
 - **Concrete before abstract**: one example fully worked, then the general statement.
+- **One step per transform.** Each algebra or logic step the narration takes happens on screen as its own
+  change, with the changed part highlighted; never morph across several steps at once. At the crux (the brief's
+  **Crux** line), slow down: show it, hold, show it again on the example.
 - **The picture is the argument.** Animate changes (a parameter sweeping, a grid deforming, a term morphing), not
   slides. If a visual could be deleted without loss, delete it.
 - **One idea per beat, one focus on screen.** Dim or remove what the narration isn't about; highlight the term being
@@ -148,6 +151,9 @@ W01 walkthrough (Read, Solve, Trap). Copy the technique, not the scene.
   pauses and motion fill the rest); 1-3 sentences per beat (4-20 s); write for the ear ("u-t equals u-x-x",
   "e to the minus n squared t", "two pi"), no `= + ^ _ \` or Unicode math; American spelling; conversational,
   confident, a little playful ("watch this", "here's the punchline"), never padded, no hype words.
+- Explain like a teacher talking a student through it: why before what, nothing used before it's explained,
+  every "so" with its reason, the crux said more than once. Never "clearly", "obviously", "it turns out" or
+  "it's easy to see": each one marks a step the viewer was asked to take on trust.
 - Plain string literals in code, no f-strings: the audio cache keys on the exact text.
 
 ## Visual rules

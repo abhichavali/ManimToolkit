@@ -20,7 +20,7 @@ print("check ok")
 import tempfile
 import sys
 sys.path.insert(0, str(here.parent))
-from mtk_cli import script, groups, vtt
+from mtk_cli import script, groups, vtt, beat_lints
 b = Path(tempfile.mkdtemp()) / "BRIEF.md"
 b.write_text('# T\n\nshared\n\n## Facts\n- f\n\n## S01_Hook [12]\nPicture: x\n1. "One two."\n   → a\n'
              '2. "Three." (style: slow)\n## S02_Next\n1. "Four."\n')
@@ -29,6 +29,14 @@ assert sc == {"S01_Hook": (12, [("One two.", None), ("Three.", "slow")]), "S02_N
 out = subprocess.run(["mtk", "brief", str(b), "S02"], capture_output=True, text=True).stdout
 assert "shared" in out and "- f" in out and "Before you: S01_Hook [12]" in out and "s02_next.py" in out, out
 assert '"One two."' not in out.split("YOUR SCENE")[1], out
+heard = b.parent / "heard.md"
+heard.write_text('# T\n\n**Viewer**: v\n**Knows**: k\nand j\n**Insight**: secret\n\n## Facts\n- f\n\n## S01_Hook [12] Hook\n'
+             'Picture: x\n1. "One two."\n   → a\n2. "Three." (style: slow)\n')
+out = subprocess.run(["mtk", "script", str(heard)], capture_output=True, text=True).stdout
+assert out == '**Viewer**: v\n**Knows**: k\nand j\n\n## S01_Hook Hook\nS01.1 "One two."\n     → a\nS01.2 "Three."\n', out
+assert beat_lints("So it turns out the sum is two.") == [
+    '"it turns out" asks the viewer to take a step on trust: show the reason, or say plainly it\'s skipped'], beat_lints
+assert beat_lints("word " * 51)[0].startswith("51 words") and not beat_lints("Square both sides; both are positive.")
 print("brief ok")
 
 # episodes: groups, chapter labels, captions

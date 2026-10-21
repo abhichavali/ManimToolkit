@@ -18,7 +18,7 @@ tokens and wall-clock time the old `manim-explainer` skill spent, without changi
 | `mtk/site/player.html` | The study-page template `mtk site` fills: player, chapters, captions, transcript, shelves, checkpoints |
 | `mtk/site/guide.tex`, `mtk/site/mtkguide.sty` | The study-guide template and its checkpoint macros (`mtk guide`) |
 | `mtk_serve.py` | `mtk serve`: the study site on localhost, plus the chat endpoint that answers with your API key |
-| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `check`, `render`, `episodes`, `guide`, `site`, `serve`, `frames`, `recipe` |
+| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `script`, `check`, `render`, `episodes`, `guide`, `site`, `serve`, `frames`, `recipe` |
 | `plugin/` | The skill: `SKILL.md` (coordinator), `API.md` (the one page scene writers read), problem-set and mind-blow docs |
 | `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards, briefs, captions and the site build (offline voice, no API cost); `tests/serve.py`: a local server without range support, like the artifact file server; `tests/mock_anthropic.py`: a stand-in Messages API for the chat tests |
 
@@ -178,3 +178,32 @@ In the desktop app's Chromium pane against the mock:
 - the conversation survived a reload;
 - Stop kept the partial answer and Clear emptied it;
 - at 375 px wide nothing overflowed.
+
+## Explaining, not summarizing
+
+Past scripts were often correct but compressed: they named an idea, stated the result and moved on, leaving the
+viewer to infer the step in between. The skill now treats explanation as its own stage:
+
+- **A teaching plan opens every brief.**
+  - **Viewer** and **Knows**: what the narration may use without explaining. Everything else gets explained before
+    it's used.
+  - **Crux**: the one or two steps where understanding is won or lost, and the misconception each must defeat.
+  - **Ladder**: the ideas in order, each tagged core, support or aside, with a time for each. Core gets at least
+    half the runtime, and asides are cut.
+- **Teacher's rules for the script.** Why before what. Nothing used before it's explained. Every "so" comes with
+  its reason. Introduce an idea, use it on the example, then sum it up. At the crux, slow down to ~105 words per
+  minute and say it more than once. Hold the picture after a reveal.
+- **A cold read before voicing.** A fresh agent plays the viewer. It reads only `mtk script BRIEF.md`, which shows
+  who the viewer is and every beat's words and picture, with no facts, plan or insight line. It logs every gap, skipped step,
+  unexplained "why", overloaded beat and aside, and says where the main idea is won or lost.
+- **`mtk voice` flags** hand-waves ("clearly", "it turns out", "it's easy to see"), beats over 50 words, and a
+  missing Knows or Crux line.
+
+**Tested on Koopman episode 1** (an older script), the cold read found 17 problems:
+- the central linearity argument was one dense spoken equation;
+- the rule that builds the matrix was never said;
+- "operator", "dynamical system" and "eigenfunction" were used before they were explained;
+- the step from φ(F(x)) = λφ(x) to λⁿ was asserted;
+- a side fact (the eigenvalue of φ²) took time the core needed.
+
+Each finding came with the sentence or picture that fixes it.

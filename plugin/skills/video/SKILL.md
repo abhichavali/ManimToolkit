@@ -44,9 +44,14 @@ mtk recipe >/dev/null && ffmpeg -version | head -1 && which pdflatex && (test -s
 
 - If the user gave a source (notes, paper, lecture, homework), read all of it, once, yourself. Otherwise work
   from what you know and look up anything you're unsure of.
-- Assume a curious, mathematically literate viewer unless told otherwise. Default anything you can.
+- Pin down the viewer literally: what they already know (courses, tools, notation) and what they don't. When
+  unsure, assume one level less: anything taught in the topic's own course is new to them and gets explained.
+  Default anything else you can.
 - Do the math before planning: derivations, the worked example, every number, checked with throwaway
   numpy/sympy. Find where the intuition breaks and what the rigorous version needs.
+- Find the crux: the one or two steps where understanding is actually won or lost. That's the step students get
+  wrong, the move that makes the whole thing work, the "but why?" an expert has stopped noticing. Write down the
+  misconception each one has to defeat. The video spends its time there.
 
 ## 2. Set up the project
 
@@ -59,14 +64,23 @@ Voice: only if the user asks (`import mtk.core as core; core.VOICE = "Charon"` i
 ## 3. Write BRIEF.md: the script
 
 A video is one idea told as a story, and the brief is where its quality is decided: the hook, the order of
-ideas, every word spoken, and the picture that makes each idea obvious. `mtk voice` and `mtk brief` parse this
-format, so keep it exact:
+ideas, every word spoken, and the picture that makes each idea obvious. It opens with a teaching plan (Viewer,
+Knows, Crux, Ladder): who's watching, what they already know, where the idea is hard, and where the time goes. Write
+that before any beat. `mtk voice`, `mtk brief` and `mtk script` parse this format, so keep it exact:
 
 ````markdown
 # <Title>  (~N min)
 
+**Viewer**: who's watching and why.
+**Knows**: what the narration may use without explaining, listed literally ("derivatives, matrix times vector,
+eigenvalues of a 2×2"). Everything else is explained on screen before it's used.
 **Hook**: the concrete question or picture of the first 20 s. **Insight**: the one sentence the viewer keeps.
 **Payoff**: how the ending answers the hook.
+**Crux**: the one or two steps where understanding is won or lost, and the misconception each must defeat.
+**Ladder**: the ideas in teaching order, each resting only on Knows and earlier rungs, tagged and timed:
+1. (support, 0:45) why the naive approach fails
+2. (core, 2:30) <the crux step>
+3. (aside, cut) <the history, the generalization, the side result>
 
 Every file starts:
 ```python
@@ -92,12 +106,38 @@ Picture: one or two lines: the layout and what's on screen overall; recipes to b
 A series: put `# Episode N: Title | subtitle` above each episode's scenes; `mtk episodes` builds one video per
 episode from these headings. Text after `[budget]` becomes the scene's chapter label.
 
-- Draft straight into the file (scene list and budgets first, then the beats), not in your head first: the
-  brief is the one long sequential step, and writing it twice (once in thinking, once in the file) doubles it.
+- Draft straight into the file (teaching plan, then scene list and budgets, then the beats), not in your head
+  first: the brief is the one long sequential step, and writing it twice (once in thinking, once in the file)
+  doubles it.
 - `[N]` in a scene heading is its narration word budget. Scenes of 30 to 90 s, each one idea; a scene is one
   agent's job, so more scenes means more parallelism.
-- Budget ~125 narration words per finished minute; follow API.md's narration rules. Beats can carry
-  `(style: slower, quieter, a little awed)` after the quote for a reveal.
+- Budget ~120 narration words per finished minute, ~105 in crux scenes; follow API.md's narration rules. Beats can
+  carry `(style: slower, quieter, a little awed)` after the quote for a reveal.
+
+**Explain it the way a good teacher would, out loud.** The failure to avoid is narration that is correct but
+compressed: it names the idea, states the result and moves on, and the viewer is left to infer the rest. A
+viewer who knows only the Knows line must be able to follow every beat without pausing to reconstruct a step.
+- **Time goes where the difficulty is.** Core rungs get at least half the runtime, and each crux step gets its own
+  scene. Support gets what the core needs and no more. Asides get a sentence or are cut: history, side results,
+  generalizations, "fun facts". The Ladder's times add up to the target before you write a beat; if they don't
+  fit, cut rungs, never squeeze them.
+- **Why before what.** Before any definition, operation or step, the viewer knows what it's for: "we want Y; the
+  obvious try fails because ...; so here's X". Never just "now define X".
+- **Nothing used before it's explained.** Each term, symbol or fact not in Knows is said in plain words and shown
+  on the example, and only then named. One new term per beat at most.
+- **Show every step.** Each "so", "which means" or "therefore" has its reason in the words or on screen. Name the
+  rule a step uses. Wherever a viewer could ask "wait, why?", the next beat answers it. Don't read an equation
+  aloud as its explanation: say what it means, then build the symbols piece by piece.
+- **Introduce, use, land.** After a new idea, use it once on the concrete example before the next one arrives,
+  then say in a sentence what we now have. Open each section with where we are and what's missing ("we can do X;
+  what we can't do yet is Y"), so the viewer always knows why this step is happening.
+- **At the crux, slow down and say it more than once**: the plain-words version, the worked example, the general
+  statement, then "in other words" in one sentence. Name the misconception and show it failing. That repetition is
+  teaching, not padding.
+- **Concrete first, all the way through.** Trace one example with real numbers through every step before the
+  general symbols, and keep it on screen as the anchor.
+- **Room to think.** After a key reveal, hold the picture with nothing new (`→ ... then hold 2 s`). Put predict
+  beats before the answers they set up.
 - For each key idea, ask "what picture makes this obvious?" before "what equation states it?", and say it in
   the `→` lines: concrete enough that the scene agent doesn't have to invent the explanation, loose enough to
   leave it the layout.
@@ -108,9 +148,35 @@ episode from these headings. Text after `[budget]` becomes the scene's chapter l
 - With `--mind-blow`: candidates, the chosen moment (or why none fits), and its plant and reveal beats.
 - Scene writers never open the source: every fact they need is in the brief.
 
-Then `cd "$P" && mtk voice BRIEF.md`: it voices every line in parallel (the scene checks later find them cached),
-prints each scene's length against its `[budget]`, and flags beats with no `→` line, scenes with no budget and a
-missing `colors(` line. Edit the prose until the total fits the target; only changed lines get re-voiced.
+**Read it as the viewer, before any scene exists.** You know the topic too well to see the gaps yourself. When the
+brief is drafted, spawn one fresh general-purpose agent (`model: "opus"`, `effort: "medium"`) with this prompt,
+verbatim:
+> You're about to watch an explainer video, and you are exactly the viewer its brief describes: you know what
+> its Knows line lists and nothing more about this topic. Run `cd <P> && mtk script BRIEF.md` and read only that
+> output (the narration, with what's on screen under each line); open no other file. Go beat by beat and note
+> every place where you would: meet a term, symbol or fact you don't know that hasn't been explained yet (gap);
+> be told a conclusion without seeing why (why); have to fill in a step the video skipped (jump); get two new
+> ideas at once, or a new one before the last was used (dense); lose track of why the video is doing what it's
+> doing (lost); want it to slow down, show it again or give an example (slow); or sit through something that
+> doesn't serve the main idea (cut). Don't fill gaps from your own expertise: if the viewer would be confused,
+> say so. Then, as a teacher: state the video's main idea in one sentence from the script alone, name the beats
+> where it's won or lost and whether they get enough time, and say what you'd cut to pay for it. Report at most
+> 30 lines, most important first, each `S03.2 [jump] what's missing → the sentence or picture that fixes it`.
+
+Meanwhile run `cd "$P" && mtk voice BRIEF.md`. It voices every line in parallel (the scene checks later find them
+cached) and prints each scene's length against its `[budget]`. It also flags:
+- beats with no `→` line, and scenes with no budget;
+- a missing `colors(`, `**Knows**` or `**Crux**` line;
+- hand-waves ("clearly", "it turns out", "it's easy to see");
+- beats too dense to follow.
+
+Then fix the brief in one pass:
+- every gap, why and jump the review found, and the rest by judgment;
+- every hand-wave, and the timing.
+
+Fixing usually means more beats at the crux and fewer elsewhere, so rebalance the budgets. Run `mtk voice` once
+more (only changed lines are re-voiced). Series over ~30 minutes: one reviewer per episode, each told that it has
+watched the earlier episodes.
 
 Shared objects: if a visual appears in more than one scene (a graph, a figure, a solver, the hook's table that
 returns at the end), write `$P/<topic>.py` before spawning: `from mtk import *`, the builders, the asserted facts,
@@ -136,6 +202,7 @@ waves of ~10 to stay clear of usage limits.
   parallel on global render slots), and review while it runs.
 - `mtk check` (fast: everything is cached) for the lint lines and lengths, then read every storyboard once,
   all in one message with parallel Reads (`media/board/*.png`: a still per beat, captioned with its narration). Is each idea obvious from the picture?
+  Does each algebra step happen on screen one at a time, rather than several in one morph?
   Does every beat show what its words say? Anything cluttered, static, off-palette? Is the rigor all there?
   Continuity across scenes (notation, colors, callbacks)? A `DRIFT` line means a concept changes color between
   scenes: send it to the scenes' agents.

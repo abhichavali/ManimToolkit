@@ -6,6 +6,8 @@
   mtk voice  BRIEF.md [--voice NAME]       voice the script (numbered "quoted" beats under ## S## headings) in
                                            parallel; print each scene's spoken length against its [budget]
   mtk brief  BRIEF.md S03|p02              what an agent needs: shared part + kit docstrings, its scene (or problem)
+  mtk script BRIEF.md                      the script as its viewer meets it: Viewer/Knows, then every beat's words
+                                           and picture, with ids (S03.2); no facts or plan (for the cold read)
   mtk episodes BRIEF.md [ep03 p02 ..]      after render: per episode (or problem) out/<stem>.mp4, web/<stem>.mp4
                                            under the artifact's 15 MB cap, poster .jpg, captions .vtt, web/episodes.json
   mtk site [--title T] [--blurb B] [--out DIR]   after episodes: web/index.html, a study page around the videos
@@ -214,6 +216,43 @@ def script(path):
     return out
 
 
+HANDWAVE = re.compile(r"\b(clearly|obviously|trivially|of course|it'?s (?:easy|not hard) to see|it is (?:easy|not hard) "
+                      r"to see|it turns out|it can be shown|one can show|it follows that|needless to say|as you know)\b",
+                      re.I)
+
+
+def beat_lints(t):
+    """What a teacher would flag in one narration line."""
+    out = [f'"{m}" asks the viewer to take a step on trust: show the reason, or say plainly it\'s skipped'
+           for m in dict.fromkeys(x.group(0).lower() for x in HANDWAVE.finditer(t))]
+    if len(t.split()) > 50:
+        out.append(f"{len(t.split())} words: one idea per beat; split it so the picture can keep up")
+    return out
+
+
+def as_heard(a):
+    """`mtk script`: who the viewer is, then each beat's words and picture. No facts, no plan, no insight line."""
+    ls = Path(a.brief).read_text().splitlines()
+    who, on = [], False
+    for ln in ls:  # the **Viewer** and **Knows** paragraphs, wrapped lines included
+        on = ln.startswith(("**Viewer**", "**Knows**")) or (on and ln.strip() and not ln.startswith(("**", "#")))
+        if on:
+            who.append(ln)
+    print("\n".join(who) or "(no **Viewer** or **Knows** line: assume only what the narration itself explains)")
+    cur = None
+    for ln in ls:
+        if GROUP.match(ln):
+            print(f"\n{ln}")
+        elif HEAD.match(ln):
+            cur, k = HEAD.match(ln).group(1), 0
+            print("\n" + re.sub(r"\s*\[\d+\]", "", ln))
+        elif cur and BEAT.match(ln):
+            k += 1
+            print(f'{cur.split("_")[0]}.{k} "{BEAT.match(ln).group(1)}"')
+        elif cur and ln.strip().startswith(("→", "->")):
+            print("     " + ln.strip())
+
+
 def voice(a):
     import warnings
     warnings.filterwarnings("ignore", category=SyntaxWarning)
@@ -229,8 +268,13 @@ def voice(a):
         got = dict(zip(jobs, ex.map(lambda j: _quiet(core.tts, j[0], a.voice, j[1]), jobs)))
     ls = Path(a.brief).read_text().splitlines()
     starts = [i for i, ln in enumerate(ls) if GROUP.match(ln) or HEAD.match(ln)]
-    if "colors(" not in "\n".join(ls[:starts[0]] if starts else ls):
+    head = "\n".join(ls[:starts[0]] if starts else ls)
+    if "colors(" not in head:
         print("BRIEF: the shared part has no colors(...) line; every file should start with the same one")
+    for k, why in (("**Knows**", "what the viewer already knows; everything else is explained before it's used"),
+                   ("**Crux**", "the step(s) where understanding is won or lost; they get the most time")):
+        if k not in head:
+            print(f"BRIEF: no {k} line: {why}")
     cur = None
     for i, ln in enumerate(ls):  # every beat needs its picture line
         cur = HEAD.match(ln).group(1) if HEAD.match(ln) else cur
@@ -254,8 +298,8 @@ def voice(a):
             bad = sorted(set(core.SYMBOLS.findall(t)))
             if bad:
                 print(f"    beat {i}: contains {' '.join(bad)}; spell math out")
-            if len(t.split()) > 60:
-                print(f"    beat {i}: {len(t.split())} words; split it")
+            for x in beat_lints(t):
+                print(f"    beat {i}: {x}")
             if not got[(t, _)]:
                 print(f"    beat {i}: voice failed (the scene's check will retry)")
     print(f"TOTAL ~{int(total // 60)}:{int(total % 60):02d} of narration with breaths ({int(words)} words); "
@@ -704,8 +748,15 @@ def site(a):
 
 SERIES = """# <Title>  (~N min)
 
+**Viewer**: <who's watching and why>.
+**Knows**: <what the narration may use without explaining, listed literally; everything else gets explained>.
 **Hook**: <the concrete question or picture of the first 20 s>. **Insight**: <the one sentence the viewer keeps>.
 **Payoff**: <how the ending answers the hook>.
+**Crux**: <the one or two steps where understanding is won or lost, and the misconception each must defeat>.
+**Ladder**: <the ideas in teaching order, each resting only on Knows and earlier rungs>:
+1. (support, 0:45) <...>
+2. (core, 2:30) <...>
+3. (aside, cut) <...>
 
 Every file starts:
 ```python
@@ -830,6 +881,9 @@ def main():
             c.add_argument("-q", default="h", choices=QUAL)
             c.add_argument("-o", help="output name (default: the file, or this folder for several)")
         c.set_defaults(fn=fn)
+    c = sub.add_parser("script")
+    c.add_argument("brief")
+    c.set_defaults(fn=as_heard)
     c = sub.add_parser("voice")
     c.add_argument("brief")
     c.add_argument("--voice", help="TTS voice, if the video doesn't use the default")
