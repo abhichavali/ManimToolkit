@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "manim-explainer",
-  "version": "0.3.0",
-  "description": "3Blue1Brown-style narrated manim explainer videos, with optional problem sets and blow-your-mind mode",
+  "version": "0.4.0",
+  "description": "3Blue1Brown-style narrated manim explainer videos, taught like a teacher (setup, flagged and slowed key moments, a cold-viewer script review), with optional problem sets, PDF study guides the video pauses for, a study site with a Claude chat box, and blow-your-mind mode",
   "author": {
     "name": "Abhinav Chavali",
     "email": "abhinavchavali12@gmail.com"

@@ -1,6 +1,6 @@
 ---
 name: video
-description: Make a 3Blue1Brown-style narrated explainer video (manim animation + Gemini TTS voice, 1080p30) on any topic, with deep intuition and full rigor. Optional post-watch problem set (--problems), a PDF study guide the video pauses for (--guide), and an optional "blow your mind" moment (--mind-blow). Use when the user asks for an explainer, animated, manim or 3b1b-style video ("make me a video on X", "explain X in a video"), a problem set to go with a video, or "blow my mind mode".
+description: Make a 3Blue1Brown-style narrated explainer video (manim animation + Gemini TTS voice, 1080p30) on any topic, with deep intuition and full rigor, taught like a teacher: it sets the question up, builds from a concrete case, and flags and slows the key moments. Optional post-watch problem set (--problems), a PDF study guide the video pauses for (--guide), and an optional "blow your mind" moment (--mind-blow). Use when the user asks for an explainer, animated, manim or 3b1b-style video ("make me a video on X", "explain X in a video"), a problem set to go with a video, or "blow my mind mode".
 argument-hint: <topic, or a path to notes/paper> [--guide] [--problems] [--mind-blow] [--minutes N] [--out DIR]
 ---
 
