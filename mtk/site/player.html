@@ -384,6 +384,21 @@ function closeCheckpoint(done) {
   renderShelf();
   tick();
 }
+function fileBtn(f) {  // a subject's extra download (a cheat sheet): same rules as the guide's button
+  if (dl) return `<button class="btn" type="button" data-act="savefile" data-path="${esc(f.path)}" data-name="${esc(f.title)}">Save: ${esc(f.title)}</button>`;
+  if (!window.claude) return `<a class="btn" href="${esc(f.path)}" target="_blank" rel="noopener">${esc(f.title)}</a>`;
+  return '';
+}
+async function saveFile(btn) {
+  btn.disabled = true;
+  try {
+    const blob = await (await fetch(btn.dataset.path)).blob();
+    await dl.save({ filename: `${btn.dataset.name.replace(/[^\w .-]+/g, '').trim() || 'file'}.pdf`, data: blob });
+    btn.textContent = 'Saved';
+  } catch (e) {
+    btn.textContent = e && e.code === 'declined' ? `Save: ${btn.dataset.name}` : 'Saving isn\u2019t available here';
+  } finally { btn.disabled = false; }
+}
 async function saveGuide(btn) {
   btn.disabled = true;
   try {
@@ -399,7 +414,8 @@ function renderShelf() {
   const kinds = [...new Set(VIDS.map(e => e.kind))];
   const all = VIDS.flatMap(cpList);
   const S = SUBJ.find(x => x.slug === tab);
-  const subj = S && (S.blurb || (S.links || []).length) ? `<section class="subj"><h3>${esc(S.name)}</h3>${S.blurb ? `<p>${esc(S.blurb)}</p>` : ''}
+  const subj = S && (S.blurb || (S.links || []).length || (S.files || []).length) ? `<section class="subj"><h3>${esc(S.name)}</h3>${S.blurb ? `<p>${esc(S.blurb)}</p>` : ''}
+    ${(S.files || []).map(fileBtn).join('')}
     ${(S.links || []).map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title)} \u2197</a>`).join('')}</section>` : '';
   const guide = all.length ? `<section class="guide"><h3>Your guide</h3>
     <p>${all.filter(c => isDone(c.id)).length} of ${all.length} checkpoints done${SUBJ.length ? ' in ' + esc(S ? S.name : '') : ''}</p>${saveBtn()}
@@ -641,6 +657,7 @@ document.addEventListener('click', ev => {
   const b = ev.target.closest('[data-act]');
   if (!b) return;
   if (b.dataset.act === 'save') { saveGuide(b); return; }
+  if (b.dataset.act === 'savefile') { saveFile(b); return; }
   closeCheckpoint(b.dataset.act === 'done');
   v.play().catch(() => {});
 });
@@ -700,7 +717,7 @@ if (SUBJ.length) {
   const saved = store.get('tab', null);
   setTab(SUBJ.some(x => x.slug === saved) ? saved : SUBJ[0].slug, true);
 } else meta();
-if (ALL.some(guideOf) && window.claude && window.claude.use) {  // the downloads capability: Save the guide
+if ((ALL.some(guideOf) || SUBJ.some(x => (x.files || []).length)) && window.claude && window.claude.use) {  // the downloads capability: Save the guide
   window.claude.use('downloads').then(x => { dl = x; renderShelf(); if (cpOpen) openCheckpoint(cpOpen); }).catch(() => { });
 }
 chatInit();

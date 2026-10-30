@@ -546,7 +546,7 @@ def episodes(a):
         total = dur(full)
         cap = min(a.max_mb, a.mb_per_min * total / 60 if a.mb_per_min else a.max_mb) * 1e6
         web = Path("web") / f"{g['stem']}.mp4"
-        for crf in [c for c in (22, 24, 26, 28, 30, 32, 34, 36) if c >= a.crf]:
+        for crf in range(a.crf, 52, 2):  # up to x264's max (51): a 17-min 1080p episode needed 42 to fit 14.5 MB
             subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", str(full), "-c:v", "libx264",
                             "-preset", "slow", "-tune", "animation", "-crf", str(crf), "-pix_fmt", "yuv420p",
                             "-c:a", "aac", "-b:a", "64k", "-ac", "1", "-movflags", "+faststart", str(web)], check=True)
@@ -696,7 +696,15 @@ def site(a):
                 files.update(fs)
             else:
                 print(f"{s['name']}: no {web}/episodes.json yet (its tab says so)")
-            subjects.append({k: s[k] for k in ("slug", "name", "blurb", "links") if k in s})
+            entry = {k: s[k] for k in ("slug", "name", "blurb", "links") if k in s}
+            for d in s.get("files", []):  # extra downloads for the subject's tab: {"title", "src"} (src relative to dir)
+                src = Path(s["dir"]).expanduser() / d["src"]
+                if src.exists():
+                    files[f"{s['slug']}/{src.name}"] = src
+                    entry.setdefault("files", []).append({"title": d["title"], "path": f"{s['slug']}/{src.name}"})
+                else:
+                    print(f"{s['name']}: {src} not found (skipped)")
+            subjects.append(entry)
     else:
         if not Path("web/episodes.json").exists():
             sys.exit("no web/episodes.json here: run mtk episodes first (or pass --subjects)")
