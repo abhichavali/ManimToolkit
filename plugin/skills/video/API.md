@@ -5,7 +5,7 @@ math that explains it. Dense, warm, no filler.
 
 **Your job is one scene.** `mtk brief BRIEF.md S03` prints the shared facts and colors, what the scenes around
 yours open with, and your scene: numbered beats, each a quoted narration line plus `→` what the screen does.
-The narration is final and already voiced. Your work is the picture: turn each `→` into animation on that beat.
+The narration is final, voiced, and read from the brief by beat number. Your work is the picture: each `→` as animation.
 Plan briefly, write the scene in one go, then let `mtk check` and the storyboard tell you what to fix.
 
 ## The loop (this exact loop, nothing else)
@@ -37,23 +37,41 @@ mtk check s03.py -s S03 --at 12.4,15   # full-size stills mid-animation, without
 ```python
 """S03: the remainder as a height (BRIEF.md S03)."""
 from mtk import *                 # manim + numpy + everything below (PDE topics: from mtk.pde import *)
-colors(p=SKY, s=EMBER, q=MINT)    # the video's concept -> hue map (same line in every file; E() reads it)
+colors(p=SKY, s=EMBER, q=MINT)    # the video's concept -> hue map (same line in every file; EQ reads it)
 
 # facts: assert every number the narration says and every formula you plot, before any animation
 assert np.isclose(2 ** 10, 1024)
 
-class S03_Remainder(VScene):      # S## names, rendered in sorted order; 30-120 s each
-    budget = 120                  # the [N] in the brief's heading: LINT if off by > 20%
+class S03_Remainder(Doc):         # the class is the brief's scene heading; rendered in sorted order
     def construct(self):
-        eq = E(r"p|=|s|\cdot|q|+|r", size=56)
-        self.beat("Here's the whole idea in one line.", Write(eq))   # beat 1, quoted verbatim from the brief
-        self.beat("Steps play in order and share the clip: a list plays together, a number pauses.",
-                  Indicate(eq[2]), [FadeIn(a), FadeIn(b)], .2, Create(c), w=(.2, .3, .3))
-        with self.say("For choreography beat() can't express, size run_times as fractions of d.") as d:
-            self.play(eq.animate.shift(UP), run_time=.3 * d)
-            self.play(Circumscribe(eq[4]), run_time=.4 * d)
-        self.wipe()               # every scene starts empty and ends with wipe()
+        eq, plot, note = EQ(r"p = s \cdot q + r"), axes([0, 1], [0, 1]), mix("the height is $r$")
+        dot = Dot(plot.c2p(0, .5), color=SKY)
+        self.follow(T("here", 28), dot)
+        self.line(1, {"whole": self.stage(top=eq, center=plot, later=note),
+                      "height": [Indicate(part(eq, "r")), FadeIn(dot)],
+                      "grows": (dot.animate.move_to(plot.c2p(1, .5)), 2)})
+        self.line(2, {"So": self.stage(left=eq, right=(plot, note))})
+        self.wipe()
 ```
+
+## Scene docs: this is how you write a scene
+
+You say what's on screen and on which word. Never write narration, coordinates or fractions of a clip.
+- `self.line(n, {phrase: cue, ...})` plays beat `n` of the brief, using its words and delivery. Each cue starts as the
+  voice says its phrase and runs until the next cue, at most 1.2 s. A cue is an animation, a list that plays together,
+  or `(cue, seconds)` when it should take longer. Phrases go in spoken order; a phrase not in the line is an error that
+  shows you the line. Every beat of your scene plays, in order. No cues: it just talks.
+- `self.stage(top=, center=, left=, right=, bottom=, later=, keep=)` is the next picture, usable as a cue or in
+  `self.play`. Slots can't overlap and fit themselves. A slot takes a mobject or a tuple stacked downward. What's already
+  on screen and listed glides over, what's new fades in, and **everything else on screen fades out**, so you never list
+  what leaves. `later=x` holds x's place in a slot until a later cue brings it in (`FadeIn(x)`); list it in its slot too.
+  `keep=x` leaves x as it is. Build composite figures with VGroup and `.arrange`, and hand the group to a slot.
+- `self.follow(label, anchor, side=UP)` keeps a label beside something moving. It enters and leaves with it.
+- `EQ(r"X_k = E_k + z^k O_k", size=44)` is math with every concept in `colors(...)` colored for you. `part(eq, "E_k")` is
+  that piece. `mix("same speed as $z$", size=30)` is words in the video's font with math among them. Use these, never
+  `\\text{}` in math or `M` for a colored concept: `LINT` flags both.
+- A `Doc` is a `VScene`. When a moment needs something else, write it with anything below, in the same file:
+  `self.play`, `self.spotlight`, `self.predict("question", 3)` (3 = its beat), `self.checkpoint`, updaters, a kit.
 
 ## API
 
@@ -106,8 +124,8 @@ only when the camera must fly through geometry). Camera `elev`/`azim` in degrees
   `.kind(u, v, "tree"|"back"|"forward"|"cross"|color) .path(names) .tag(n, text)`; edges follow live node centers
 
 **Scene** (`VScene`: 2D with a movable camera; `VScene3D`: pin text with `self.add_fixed_in_frame_mobjects`)
-- `self.beat(text, *steps, w=None, style=None)`: steps share the clip; a number step is a pause **as a fraction of
-  the clip** (`.2`), never seconds · `with self.say(text, style=None) as d:` (d = clip seconds)
+- `self.beat(text, *steps, w=None, style=None)`, `with self.say(text) as d:`: narration typed in the file, for walkthroughs
+  with no script; a number step is a pause as a fraction of the clip
 - `self.title_card(kicker, title, sub)` -> mobject · `self.section(text)` plays + returns the header
 - `self.spotlight(*mobs)` -> animation: a key moment; everything else dims and mobs glow (play it in that beat,
   hold, then `self.unspot()` -> animation in the next; `wipe` also lifts it). Use it where the brief's `→` says.
@@ -150,9 +168,8 @@ W01 walkthrough (Read, Solve, Trap). Copy the technique, not the scene.
 
 ## Narration
 
-- **In a script-first brief the narration is final**: one quoted line = one `beat`/`say`, copied verbatim (a changed
-  character costs a new voice call and drifts from the script). You may split a line at a sentence boundary when
-  the picture needs two steps; never reword, add or drop words. Narration that seems wrong: say so in your report.
+- **In a script-first brief the narration is final**: `self.line(n)` reads it, and you never retype it. Narration that
+  seems wrong: say so in your report.
 - Writing narration (the coordinator, in the brief): ~110 words per finished minute (the voice reads ~140 wpm;
   pauses and motion fill the rest); 1-3 sentences per beat (4-20 s); write for the ear ("u-t equals u-x-x",
   "e to the minus n squared t", "two pi"), no `= + ^ _ \` or Unicode math; American spelling; conversational,
@@ -162,7 +179,6 @@ W01 walkthrough (Read, Solve, Trap). Copy the technique, not the scene.
   moments out loud ("pay close attention here", "this is the key step"), slow them down (`style="slower and
   deliberate"`), and say each one again another way. Never "clearly", "obviously", "it turns out" or "it's easy
   to see": each one marks a step the viewer was asked to take on trust.
-- Plain string literals in code, no f-strings: the audio cache keys on the exact text.
 
 ## Visual rules
 

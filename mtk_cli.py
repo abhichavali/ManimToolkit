@@ -402,7 +402,7 @@ def brief(a):
             first = next((BEAT.match(x).group(1) for x in ls[scenes[j]:] if BEAT.match(x)), "")
             print(f"\n{label}: {ls[scenes[j]].lstrip('# ')}" + (f' (opens: "{first[:90]}")' if first else ""))
     budget = HEAD.match(ls[i]).group(2)
-    print(f"\nYOUR SCENE: class {name}(VScene) in {name.lower()}.py"
+    print(f"\nYOUR SCENE: class {name}(Doc) in {name.lower()}.py"
           + (f", budget = {budget} (narration words, not seconds)" if budget else "") + "\n")
     print("\n".join(ls[i:end]).rstrip())
 

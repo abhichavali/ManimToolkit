@@ -62,6 +62,13 @@ Past parts were usually 4-7 min against this trial's 3.4 min, so per minute of v
 not the raw 6x. Wall-clock time was dominated by model generation, not tooling: a first `mtk check` of a new
 file takes ~25 s (voices are prefetched in parallel), and later checks take ~3 s per scene.
 
+## Scene docs
+
+`class S03(Doc)` writes a scene against the brief: `self.line(3, {"split": Write(eq)})` plays beat 3 with the cue on its
+spoken word, and `self.stage(top=eq, left=plot)` lays out the next picture so nothing overlaps, removing whatever it
+doesn't list. `mtk check` also flags serif words in math, uncolored concepts and text that fades before it can be read.
+It's the same manim underneath, so a `Doc` can do anything a `VScene` can.
+
 ## The agent renderer
 
 `mtk render --agent` and `mtk check --agent` take the same scene files: anything manim can draw still works. A render

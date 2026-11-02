@@ -372,6 +372,7 @@ FROZEN = 6.0  # seconds of narration over an unchanging picture before lint comp
 QUIET = 4.0  # seconds without narration (inside a narrated scene) before lint complains
 SNAP = os.environ.get("MTK_SNAP")  # `mtk check` sets it: a folder for one still per beat (the storyboard)
 AT = os.environ.get("MTK_AT")  # `mtk check --at`: stills at these scene times instead of at the beats
+SERIF_WORDS = re.compile(r"\\(?:text|mathrm|textbf)\{[^}]*[A-Za-z]{2}")
 
 
 def _texts(m):
@@ -460,10 +461,15 @@ class Narrated:
             pal = self.__dict__.setdefault("_pal", {})
             for t in texts:
                 if isinstance(t, SingleStringMathTex):
+                    if SERIF_WORDS.search(t.tex_string):
+                        self._warn((id(t), "serif"), f"{_label(t)} sets words in the serif math font: use T, or mix()")
                     for part in [x for x in t.submobjects if getattr(x, "tex_string", None)] or [t]:  # MathTexPart
                         tex = part.tex_string.strip()
                         if 0 < len(tex) <= 24 and part.family_members_with_points():
-                            pal[(id(part), tex)] = part.family_members_with_points()[0].get_fill_color().to_hex().lower()
+                            col = part.family_members_with_points()[0].get_fill_color().to_hex().lower()
+                            pal[(id(part), tex)] = col
+                            if tex in COLORS and col != ManimColor(COLORS[tex]).to_hex().lower() and col == INK.lower():
+                                self._warn((id(part), "hue"), f"{tex!r} is white but colors() makes it a concept: use EQ")
 
     def _lint_covered(self, roots, texts, area):
         """Text whose center sits under an opaque shape (or image) drawn after it: z-order bugs, cards drawn
@@ -487,12 +493,29 @@ class Narrated:
                                                    "(add it later or raise its z_index)")
                     break
 
+    def _track_reading(self, args):
+        """Long text that fades away before a viewer could have read it. Short labels and text morphing on are exempt."""
+        morph = any(isinstance(a, Transform) and not isinstance(a, FadeOut) for a in args)
+        seen = self.__dict__.setdefault("_reading", {})
+        now = {id(t): t for m in self._lint_roots() for t in _texts(m)
+               if max((x.get_fill_opacity() for x in t.family_members_with_points()), default=0) > 0.5}
+        for i, t in now.items():
+            seen.setdefault(i, [t, self.time, self.time])[2] = self.time
+        for i in [i for i in seen if i not in now]:
+            t, first, last = seen.pop(i)
+            s = getattr(t, "original_text", None) or getattr(t, "tex_string", "")
+            need = 0.6 + (len(s.split()) / 3.5 if hasattr(t, "original_text") else len(re.sub(r"\\[a-z]+|[{} ]", "", s)) / 12)
+            if not morph and need > 1.4 and last - first < 0.6 * need:
+                self._warn((i, "read"), f"{_label(t)} is readable for {last - first:.1f}s; it needs ~{need:.1f}s")
+
     def play(self, *args, **kw):
         super().play(*args, **kw)
         if not all(isinstance(a, Wait) for a in args):
             self._dirty = True  # the picture changed since the last storyboard still
         if SNAP:
             self._snap_at()  # a time inside a Wait: frozen frames skip tick()
+            if self.lint_on:  # off over cards and spotlights, whose timing is on purpose
+                self._track_reading(args)
         if self.lint_on:
             self._lint()
 
