@@ -1139,6 +1139,7 @@ def main():
     c.add_argument("--minutes", type=int, default=10)
     c.add_argument("--writer-effort", default="medium", choices=("low", "medium", "high"))
     c.add_argument("--author-effort", default="high", choices=("medium", "high", "xhigh"))
+    c.add_argument("--writer-model", default="opus", choices=("opus", "sonnet"))
     c.add_argument("--dir", help="project folder (default ~/Movies/Explainers/<topic slug>)")
     c.add_argument("-q", default="h", choices=QUAL)
     c.set_defaults(fn=make)

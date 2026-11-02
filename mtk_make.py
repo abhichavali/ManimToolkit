@@ -62,9 +62,9 @@ def voiced():
     sys.exit("the voice API keeps refusing lines (OpenRouter key limit?): " + out[:300])
 
 
-def claude(stage, prompt, effort, resume=None, system=SKILL / "API.md", tools="Bash,Read,Write,Edit"):
+def claude(stage, prompt, effort, resume=None, system=SKILL / "API.md", tools="Bash,Read,Write,Edit", model="opus"):
     """One headless agent, on a minimal prefix (no user settings, MCP servers or skills). Returns (text, session id)."""
-    cmd = ["claude", "-p", "--output-format", "json", "--model", "opus", "--effort", effort, "--setting-sources", "",
+    cmd = ["claude", "-p", "--output-format", "json", "--model", model, "--effort", effort, "--setting-sources", "",
            "--strict-mcp-config", "--disable-slash-commands", "--tools", tools, "--allowedTools", ALLOW,
            "--permission-mode", "acceptEdits", "--max-budget-usd", "30"]  # a runaway guard: no stage comes near it
     if system:
@@ -148,7 +148,8 @@ def writers(a, st):
                         f"{name.lower()}.py. The reference in your system prompt is complete; its loop and token rules "
                         f"are mandatory. Your brief, from `mtk brief BRIEF.md {short}`:\n\n"
                         f"{run('brief', 'BRIEF.md', short)[0]}\n\nRead nothing else. Report in at most 8 lines.",
-                        UP_ONE[a.writer_effort] if i == 0 else a.writer_effort)  # the hook makes or breaks the video
+                        UP_ONE[a.writer_effort] if i == 0 else a.writer_effort,  # the hook makes or breaks the video
+                        model=a.writer_model)
         with lock:
             st["sessions"][name] = sid
         save(st)
@@ -158,16 +159,16 @@ def writers(a, st):
     return names
 
 
-def send(st, notes, why):
+def send(a, st, notes, why):
     """Hand each scene's notes back to the agent that wrote it, all at once."""
     def one(name):
         claude(f"fix {name.split('_')[0]}", f"{why}\n\n{notes[name]}\n\nFix each one and confirm it with `mtk check "
-               f"{name.lower()}.py --agent`. Report in at most 4 lines.", "medium", st["sessions"][name])
+               f"{name.lower()}.py --agent`. Report in at most 4 lines.", "medium", st["sessions"][name], model=a.writer_model)
     with cf.ThreadPoolExecutor(10) as ex:
         list(ex.map(one, notes))
 
 
-def check(st, names):
+def check(a, st, names):
     """Every scene runs, or goes back to its writer. Returns the check output."""
     for _ in range(3):
         out = run("check")[0]
@@ -178,7 +179,7 @@ def check(st, names):
             bad[n] = m.group(0) if m else "Your scene's class is missing from the check."
         if not bad:
             return out
-        send(st, bad, "The check of your scene failed. Open media/logs/ only if this doesn't say enough.")
+        send(a, st, bad, "The check of your scene failed. Open media/logs/ only if this doesn't say enough.")
     sys.exit("these scenes still fail after two rounds with their writers:\n" + "\n".join(bad))
 
 
@@ -232,9 +233,9 @@ def reviews(a, st, names, out):
             st["done"].append("reviewed")
             save(st)
             return video, stray
-        send(st, notes, "Review notes on your scene:")
+        send(a, st, notes, "Review notes on your scene:")
         scope = list(notes)
-        out = check(st, names)
+        out = check(a, st, names)
         rendered = render(a)
         video = mp4(rendered)
     return video, []
@@ -267,4 +268,4 @@ def make(a):
             sys.exit(out)
     author(a, st, skill())
     names = writers(a, st)
-    report(*reviews(a, st, names, check(st, names)))
+    report(*reviews(a, st, names, check(a, st, names)))
