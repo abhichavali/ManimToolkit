@@ -1137,6 +1137,7 @@ def main():
     c = sub.add_parser("make")
     c.add_argument("topic", help="the topic, or a path to notes or a paper, as you would ask for the video")
     c.add_argument("--minutes", type=int, default=10)
+    c.add_argument("--writer-effort", default="high", choices=("low", "medium", "high"))
     c.add_argument("--dir", help="project folder (default ~/Movies/Explainers/<topic slug>)")
     c.add_argument("-q", default="h", choices=QUAL)
     c.set_defaults(fn=make)

@@ -23,6 +23,7 @@ PY = str(Path(sys.executable))
 ALLOW = f"Read Write Edit WebSearch WebFetch Bash(mtk *) Bash({PY} *) Bash(cd *) Bash(ls *) Bash(cat *)"
 WRITING = "Bash,Read,Write,Edit,WebSearch,WebFetch"
 DIR = Path("media/make")
+UP_ONE = dict(low="medium", medium="high", high="xhigh")
 lock = threading.Lock()
 
 
@@ -138,7 +139,7 @@ def writers(a, st):
                         f"{name.lower()}.py. The reference in your system prompt is complete; its loop and token rules "
                         f"are mandatory. Your brief, from `mtk brief BRIEF.md {short}`:\n\n"
                         f"{run('brief', 'BRIEF.md', short)[0]}\n\nRead nothing else. Report in at most 8 lines.",
-                        "xhigh" if i == 0 else "high")  # the hook makes or breaks the video
+                        UP_ONE[a.writer_effort] if i == 0 else a.writer_effort)  # the hook makes or breaks the video
         with lock:
             st["sessions"][name] = sid
         save(st)

@@ -28,8 +28,8 @@ mtk check s03.py -s S03 --at 12.4,15   # full-size stills mid-animation, without
   in different scenes: use `E(...)` so `colors(...)` applies, or say why it differs.
 - Write the whole file before the first check. Run `mtk check` in the foreground with a long Bash timeout
   (600000 ms); a voice missing from the cache is generated on the spot. Never background it or poll it.
-- Done when lint is clean and every tile of the storyboard shows what its beat says, judged on the board of your
-  final version (re-read it after your last change). Usually 1-3 rounds.
+- **Two rounds.** Check and read the board, fix everything you saw in one edit pass, check again with `--agent`. Clean
+  lint and a right picture: stop and report; a reviewer reads every board after you. A third round is only for a visible defect.
 - Never render video (`manim -ql`, `mtk render`): the coordinator does the final pass.
 
 ## Skeleton
