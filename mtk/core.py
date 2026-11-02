@@ -321,6 +321,16 @@ def _say_fallback(text, h):
     return out
 
 
+def _out_of_credit():
+    """Is a 402/403 the key's spending limit? OpenRouter also sends 403 for parallel calls, with plenty of credit left."""
+    try:
+        req = urllib.request.Request("https://openrouter.ai/api/v1/key", headers={"Authorization": f"Bearer {_key()}"})
+        left = json.loads(urllib.request.urlopen(req, timeout=30).read())["data"].get("limit_remaining")
+    except Exception:
+        return False
+    return left is not None and left <= 0.01
+
+
 def tts(text, voice=None, style=None):
     """Return (wav_path, seconds) for text, calling the API only on a cache miss. style adds to STYLE for this line
     (a key moment: 'slower and deliberate, stressing the key words' reads ~122 wpm)."""
@@ -338,19 +348,19 @@ def tts(text, voice=None, style=None):
         req = urllib.request.Request(TTS_URL, body, {"Authorization": f"Bearer {_key()}",
                                                      "Content-Type": "application/json"})
         pcm = None
-        for attempt in range(4):
+        for attempt in range(6):
             try:
                 pcm = urllib.request.urlopen(req, timeout=180).read()
                 break
             except urllib.error.HTTPError as e:
-                if e.code in (402, 403):  # key or account spending limit: retrying won't help
+                if e.code in (402, 403) and _out_of_credit():  # retrying won't help
                     _QUOTA["out"] = True
                     break
-                if attempt == 3:
+                if attempt == 5:
                     raise
                 time.sleep(3 * (attempt + 1))
             except Exception:
-                if attempt == 3:
+                if attempt == 5:
                     raise
                 time.sleep(3 * (attempt + 1))
         if pcm is None:

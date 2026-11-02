@@ -16,6 +16,37 @@ os.chdir(d)
 env = {**os.environ, "MTK_TTS": "say", "PYTHONWARNINGS": "ignore"}
 from mtk.doc import find_phrase, solve, tex_parts, word_times
 
+# --- a 403 with credit left is retried; only a spent key falls back to the draft voice
+import io, urllib.error, urllib.request
+import mtk.core as core
+core.config.input_file = str(d / "x.py")
+os.environ["OPENROUTER_API_KEY"] = "test"
+real_sleep, core.time.sleep = core.time.sleep, lambda s: None
+
+
+def fake(left, fails):
+    calls = []
+
+    def urlopen(req, timeout=None):
+        if req.full_url.endswith("/key"):
+            return io.BytesIO(json.dumps({"data": {"limit_remaining": left}}).encode())
+        calls.append(1)
+        if len(calls) <= fails:
+            raise urllib.error.HTTPError(req.full_url, 403, "no", {}, None)
+        return io.BytesIO(b"\0\0" * 2400)
+    return urlopen, calls
+
+
+saved, os_tts = urllib.request.urlopen, os.environ.pop("MTK_TTS", None)
+urllib.request.urlopen, calls = fake(14.0, 3)
+path, _ = core.tts("credit left")
+assert len(calls) == 4 and not path.name.endswith(".say.wav"), (calls, path)
+urllib.request.urlopen, calls = fake(0.0, 9)
+path, _ = core.tts("credit gone")
+assert len(calls) == 1 and path.name.endswith(".say.wav"), (calls, path)
+urllib.request.urlopen, core.time.sleep, core._QUOTA["out"] = saved, real_sleep, False
+print("voice: a 403 with credit left retries, a spent key falls back")
+
 # --- word timing, against joins whose times are known exactly
 parts = ["The first thing to notice is how many steps this takes,", "and that number grows with the square of the size.",
          "So we need another idea,", "one that reuses work we already did."]
