@@ -90,6 +90,12 @@ class S01_A(Doc):
         assert note not in self.mobjects, "stage() must clear what it doesn't list"
         assert np.isclose(lab.get_center()[0], dot.get_center()[0], atol=.01), "the label left its dot"
         assert eq.get_center()[1] > 2, "eq stays in the top slot"
+        d2, lab2 = Dot(), T("cue", 30)
+        self.follow(lab2, d2)
+        self.play(FadeIn(d2))
+        assert lab2 in self.mobjects, "a label enters with its anchor on a cue too"
+        self.play(FadeOut(d2))
+        assert lab2 not in self.mobjects, "and leaves with it"
         self.play(self.stage(left=huge, right=T("beside it", 30)))
         boxes = [m for m in self.mobjects]
         l, r = sorted(self.mobjects, key=lambda m: m.get_center()[0])[:2]

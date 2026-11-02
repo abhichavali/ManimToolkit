@@ -172,9 +172,6 @@ class Stage:
                     out.append(MoveToTarget(m))
             elif not any(m is x for x in self.later):
                 out.append(FadeIn(m))
-        for label, anchor in sc._follows.values():  # a label enters with its anchor
-            if id(label) not in now and any(id(x) in ids for x in anchor.get_family()):
-                out.append(FadeIn(label))
         return out
 
 
@@ -194,6 +191,15 @@ class Doc(VScene):
 
     def play(self, *args, **kw):
         args = [a for x in args for a in (x.anims() if isinstance(x, Stage) else [x])]
+        now = {id(x) for m in self.mobjects for x in m.get_family()}
+        moving = {id(a.mobject): a for a in args if hasattr(a, "mobject")}
+        for label, anchor in self._follows.values():  # a label enters and leaves with its anchor
+            a = moving.get(id(anchor))
+            if a is not None and id(label) not in moving:
+                if isinstance(a, FadeOut) and id(label) in now:
+                    args.append(FadeOut(label))
+                elif not isinstance(a, FadeOut) and id(label) not in now:
+                    args.append(FadeIn(label))
         if args:
             super().play(*args, **kw)
 
