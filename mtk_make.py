@@ -110,7 +110,7 @@ def author(a, st, sk):
                                  "directory is the project folder and BRIEF.md its skeleton: fill it in place. Your reference "
                                  f"for what the scenes can draw is in your system prompt. For throwaway numpy and sympy "
                                  f"checks use `{PY}`. Stop when the brief and any shared kit are written: a script runs the "
-                                 f"voice pass and a cold read next.\n\n{sk['author']}", "xhigh", tools=WRITING)
+                                 f"voice pass and a cold read next.\n\n{sk['author']}", a.author_effort, tools=WRITING)
         save(st)
     with cf.ThreadPoolExecutor(2) as ex:  # the cold read and the voice pass overlap
         heard = run("script", "BRIEF.md")[0]
@@ -118,9 +118,18 @@ def author(a, st, sk):
         said = ex.submit(voiced)
         notes, said = cold.result()[0], said.result()
     (DIR / "cold.md").write_text(notes)
-    claude("author fix", f"Cold read of your brief:\n\n{notes}\n\n`mtk voice` says:\n\n{said}\n\n{sk['fix']}", "xhigh",
-           st["author"], tools=WRITING)
-    (DIR / "voice.txt").write_text(voiced())
+    claude("author fix", f"Cold read of your brief:\n\n{notes}\n\n`mtk voice` says:\n\n{said}\n\n{sk['fix']}\n\nThe narration "
+           f"must total at most {a.minutes}:00 with breaths; pay for additions by cutting rungs.", a.author_effort, st["author"],
+           tools=WRITING)
+    said = voiced()
+    for _ in range(2):  # every later stage scales with the script, so a long one costs the whole pipeline
+        m = re.search(r"TOTAL ~(\d+):(\d+)", said)
+        if not m or int(m.group(1)) * 60 + int(m.group(2)) <= a.minutes * 60 * 1.05:
+            break
+        claude("author cut", f"The narration runs {m.group(1)}:{m.group(2)} against a target of {a.minutes}:00. Cut whole rungs or "
+               "asides, not the crux, and keep the budgets true.", a.author_effort, st["author"], tools=WRITING)
+        said = voiced()
+    (DIR / "voice.txt").write_text(said)
     st["done"].append("author")
     save(st)
 
@@ -153,7 +162,7 @@ def send(st, notes, why):
     """Hand each scene's notes back to the agent that wrote it, all at once."""
     def one(name):
         claude(f"fix {name.split('_')[0]}", f"{why}\n\n{notes[name]}\n\nFix each one and confirm it with `mtk check "
-               f"{name.lower()}.py --agent`. Report in at most 4 lines.", "high", st["sessions"][name])
+               f"{name.lower()}.py --agent`. Report in at most 4 lines.", "medium", st["sessions"][name])
     with cf.ThreadPoolExecutor(10) as ex:
         list(ex.map(one, notes))
 
@@ -187,11 +196,12 @@ def mp4(rendered):
 
 
 def reviews(a, st, names, out):
-    """A fresh reviewer per round: full video first, then only the scenes it sent back."""
+    """A full review, then a fresh reviewer confirms the fixes. Its notes go back once more, without a third review: each
+    new reviewer otherwise finds new taste to raise, and the loop never settles."""
     sk, scope, notes = skill(), names, {}
     rendered = render(a)
     video = mp4(rendered)
-    for rnd in range(1, 4):
+    for rnd in range(1, 3):
         if "reviewed" in st["done"]:
             break
         if f"review {rnd}" in st["done"]:
@@ -200,7 +210,8 @@ def reviews(a, st, names, out):
         path = Path("REVIEW.md")
         path.unlink(missing_ok=True)
         ask = (f"Scene writers answered these notes from the last review:\n{was}\n\nRead only the storyboards of "
-               f"{', '.join(scope)}, and say what is still wrong or newly broken." if was else sk["review"])
+               f"{', '.join(scope)}. Report only a note that isn't fixed or something the fix broke; the rest passed review, "
+               "so raise nothing new." if was else sk["review"])
         claude(f"review {rnd}", f"You are reviewing an explainer video as its viewer would, in the current directory. "
                f"BRIEF.md is the script. Your reference for what the toolkit can draw is in your system prompt.\n\n{ask}\n\n"
                f"The video is {video}: check motion and full resolution with one image, `mtk frames {video} <4-6 seconds "
@@ -208,7 +219,7 @@ def reviews(a, st, names, out):
                f"`mtk check`:\n{out}\n\n`mtk render`:\n{rendered}\n\nWrite REVIEW.md: one line per real defect, nothing "
                "else, as `S03.2: what's wrong -> what to do` (S03 is the scene, 2 the beat; a problem across scenes gets a "
                "line per scene). Taste you can't tie to a viewer's confusion or a visible flaw isn't a defect. No "
-               "defects: an empty file. Don't edit anything else.", "xhigh", tools="Bash,Read,Write")
+               "defects: an empty file. Don't edit anything else.", "high", tools="Bash,Read,Write")
         text = path.read_text() if path.exists() else ""
         (DIR / f"review{rnd}.md").write_text(text)
         by = lambda ln: next((n for n in names if n.split("_")[0] == ln.split(".")[0].split(":")[0]), None)
@@ -217,10 +228,10 @@ def reviews(a, st, names, out):
         stray = [ln for ln in lines if not by(ln)]
         st["done"].append(f"review {rnd}")
         save(st)
-        if rnd == 3 or not notes:
+        if not notes:
             st["done"].append("reviewed")
             save(st)
-            return video, lines if rnd == 3 else stray
+            return video, stray
         send(st, notes, "Review notes on your scene:")
         scope = list(notes)
         out = check(st, names)

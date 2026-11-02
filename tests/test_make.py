@@ -56,7 +56,7 @@ elif prompt.startswith("Write scene"):
     n = m.group(1)
     kind = "scene" + n
     assert "YOUR SCENE: class" in prompt and "--system-prompt-file" in argv
-    assert ("--effort" in argv and argv[argv.index("--effort") + 1] == ("xhigh" if n == "1" else "high"))
+    assert ("--effort" in argv and argv[argv.index("--effort") + 1] == ("high" if n == "1" else "medium"))
     good = SCENE.format(n=n, name="AB"[int(n) - 1], line=["One two three.", "Four five six."][int(n) - 1])
     Path(m.group(2) + ".py").write_text(good.replace("self.wipe()", "boom()") if n == "2" else good)  # S02 crashes first
 elif prompt.startswith("The check of your scene failed"):
