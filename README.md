@@ -18,6 +18,7 @@ tokens and wall-clock time the old `manim-explainer` skill spent, without changi
 | `mtk/site/player.html` | The study-page template `mtk site` fills: player, chapters, captions, transcript, shelves, checkpoints |
 | `mtk/site/guide.tex`, `mtk/site/mtkguide.sty` | The study-guide template and its checkpoint macros (`mtk guide`) |
 | `mtk_serve.py` | `mtk serve`: the study site on localhost, plus the chat endpoint that answers with your API key |
+| `mtk/agent.py` | The agent renderer (`mtk render --agent`): fingerprinted, forked, reused segments |
 | `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `script`, `check`, `render`, `episodes`, `guide`, `site`, `serve`, `frames`, `recipe` |
 | `plugin/` | The skill: `SKILL.md` (coordinator), `API.md` (the one page scene writers read), problem-set and mind-blow docs |
 | `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards, briefs, captions and the site build (offline voice, no API cost); `tests/serve.py`: a local server without range support, like the artifact file server; `tests/mock_anthropic.py`: a stand-in Messages API for the chat tests |
@@ -60,6 +61,29 @@ and `mtk check`. It finished with 0 lint, caught a rounding error in the brief, 
 Past parts were usually 4-7 min against this trial's 3.4 min, so per minute of video the saving is roughly 3-4x,
 not the raw 6x. Wall-clock time was dominated by model generation, not tooling: a first `mtk check` of a new
 file takes ~25 s (voices are prefetched in parallel), and later checks take ~3 s per scene.
+
+## The agent renderer
+
+`mtk render --agent` and `mtk check --agent` take the same scene files: anything manim can draw still works. A render
+steps each scene through every frame without drawing and fingerprints what the camera would draw. A worker forked at the
+start of each play draws and encodes that play with manim's own code, only if no segment with that fingerprint exists.
+A scene none of whose inputs changed doesn't run at all. If a worker fails, the scene falls back to a classic render.
+
+On a real project (14 scenes, 12:34, 22,706 frames, 8 cores, 8 GB):
+
+| | `mtk render` | `mtk render --agent` |
+|---|---|---|
+| cold | 152 s | 162 s |
+| nothing changed | 101 s | 16 s |
+| one scene edited | 79 s | 21 s (108 frames redrawn) |
+| matches a cold classic render | no: 0.7 s longer, frames shift | yes: every frame, the audio, same file size |
+
+Cold renders aren't faster: the work is the same, and scenes already ran in parallel. Reuse is what pays. 3D scenes
+draw in parallel but never reuse a segment.
+
+`mtk check --agent` reports only the beats that changed since the last check, names what moved, and tiles just those. A
+one-beat fix costs ~400 image tokens to look at instead of a whole board (~2,000 for a 15-beat scene). `mtk check --at
+12.4,15` gives full-size stills mid-animation with no video. `python tests/test_agent.py` checks all of this offline.
 
 ## Speed: script first, one agent per scene
 
@@ -165,19 +189,6 @@ Conversations are per video and per viewer (localStorage), with Stop and Clear.
   dotfiles are never served, and the server listens on localhost only.
 - **Published** as an artifact (the plan says to pass `capabilities: {"sample": {}}`), the same box asks Claude
   through each viewer's own claude.ai account, so no key is involved at all.
-
-Checked with `python3 tests/test_check.py`, against `tests/mock_anthropic.py`:
-- `site()` turns chat on only when there is a key, and keeps the key out of the page.
-- `mtk serve` sends the model, workspace header, fallback beta and `cache_control`, and streams the answer.
-- Malformed history gets 400, no key gets 403, and the key file gets 404.
-
-In the desktop app's Chromium pane against the mock:
-- answers streamed in;
-- the `[2:09]` link jumped the video;
-- follow-ups carried the history and the viewer's position;
-- the conversation survived a reload;
-- Stop kept the partial answer and Clear emptied it;
-- at 375 px wide nothing overflowed.
 
 ## Explaining, not summarizing
 

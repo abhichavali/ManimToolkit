@@ -3,6 +3,9 @@
   mtk check  [files] [-s SCENE..] [-j N]   dry run (no video): LINT/REPORT lines + one storyboard per scene
                                            (a still at the end of every beat, captioned with its narration)
   mtk render [files] [-q l|m|h|k] [-o NAME] [-j N]   render (default h = 1080p30) and join into out/NAME.mp4
+  mtk check --agent / --at 12.4,15         report only the beats that changed since the last check (and a sheet of
+                                           just those) / full-size stills at chosen moments, with no video
+  mtk render --agent                       same pixels, drawn in parallel inside each scene; redraws only changed plays
   mtk voice  BRIEF.md [--voice NAME]       voice the script (numbered "quoted" beats under ## S## headings) in
                                            parallel; print each scene's spoken length against its [budget]
   mtk brief  BRIEF.md S03|p02              what an agent needs: shared part + kit docstrings, its scene (or problem)
@@ -17,6 +20,8 @@
                                            crop every checkpoint for the site (web/guide.pdf, web/cp-*.png, guide.json)
   mtk serve [--dir web] [--port 8000]      serve the site locally, seekable, with the chat box answered by Claude
                                            using your key server-side (~/.anthropic_api_key or the project's)
+  mtk make "TOPIC" [--minutes N] [--dir D]  the whole video with no coordinator: fresh headless agents per stage, a script
+                                           between them; media/make/usage.jsonl has what each cost; re-run to resume
   mtk new SLUG [--walk]                    ~/Movies/Explainers/SLUG with a BRIEF.md skeleton (series or walkthroughs)
   mtk frames VIDEO SEC [SEC..]             one captioned sheet of full-quality frames, for spot checks
   mtk recipe [NAME]                        list the recipe gallery, or print one recipe's source
@@ -55,20 +60,24 @@ def slots():
     return max(1, min(os.cpu_count() or 1, int(ram * 0.75)))
 
 
-def grab_slot():
-    """Block until one of the machine-wide render slots is free; returns the fd holding it."""
+def try_slot():
+    """One of the machine-wide render slots if any is free (the fd holding it), else None."""
     d = Path.home() / ".cache/mtk/slots"
     d.mkdir(parents=True, exist_ok=True)
-    n = slots()
-    while True:
-        for i in range(n):
-            fd = os.open(d / f"{i}.lock", os.O_CREAT | os.O_RDWR)
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                return fd
-            except BlockingIOError:
-                os.close(fd)
+    for i in range(slots()):
+        fd = os.open(d / f"{i}.lock", os.O_CREAT | os.O_RDWR)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except BlockingIOError:
+            os.close(fd)
+
+
+def grab_slot():
+    """Block until one of the machine-wide render slots is free; returns the fd holding it."""
+    while (fd := try_slot()) is None:
         time.sleep(0.5)
+    return fd
 
 
 def find(files, picks):
@@ -85,20 +94,21 @@ def find(files, picks):
     return out
 
 
-def manim(f, s, flags, env=None):
+def manim(f, s, flags, env=None, slot=True):
     """Run one scene (one retry: parallel renders can race on the shared LaTeX cache). Returns (ok, log lines).
-    A failed scene's log is kept at media/logs/<file>.<scene>.log."""
+    A failed scene's log is kept at media/logs/<file>.<scene>.log. slot=False: the scene's workers take the slots."""
     tmp = Path("media/logs") / f"{Path(f).stem}.{s}.{os.getpid()}.log"  # concurrent checks don't share logs
     tmp.parent.mkdir(parents=True, exist_ok=True)
     for _ in range(2):
-        fd = grab_slot()
+        fd = grab_slot() if slot else None
         try:
             with open(tmp, "w") as out:
                 ok = subprocess.run([MANIM, *flags, f, s], stdout=out, stderr=subprocess.STDOUT,
                                     env={**os.environ, "PYTHONWARNINGS": "ignore", "COLUMNS": "200", **(env or {})}
                                     ).returncode == 0
         finally:
-            os.close(fd)
+            if fd is not None:
+                os.close(fd)
         if ok:
             break
     ls = [ln.strip() for ln in re.split(r"[\r\n]", tmp.read_text(errors="ignore"))]
@@ -111,7 +121,7 @@ def manim(f, s, flags, env=None):
 
 def marks(ls):
     """REPORT/LINT lines a scene printed."""
-    return [m.group(0) for ln in ls for m in [re.search(r"(REPORT|LINT) .*", ln)] if m]
+    return [m.group(0) for ln in ls for m in [re.search(r"(REPORT|LINT|AGENT) .*", ln)] if m]
 
 
 def failure(f, s, ls):
@@ -164,38 +174,80 @@ def _quiet(fn, *a):
         return None
 
 
-def board(snapdir, out):
-    """Tile a scene's beat stills into captioned storyboard sheet(s). Returns (paths, changed?)."""
+def tiled(tiles, out, tile=TILE, cols=COLS):
+    """Captioned sheet(s) from [(number, png, {"t", "text"}), ...]. Returns the paths."""
     from PIL import Image, ImageDraw, ImageFont
-    beats = json.loads((snapdir / "beats.json").read_text()) if (snapdir / "beats.json").exists() else []
-    pngs = sorted(snapdir.glob("[0-9][0-9].png"))
-    if not pngs:
-        return [], False
-    digest = hashlib.sha1(b"".join(p.read_bytes() for p in pngs) + json.dumps(beats).encode()).hexdigest()
-    sha = out.with_suffix(".sha")
-    changed = not sha.exists() or sha.read_text() != digest
     font = ImageFont.load_default(size=15)
-    w, h = TILE
+    w, h = tile
     cap = 24
     paths = []
-    for k in range(0, len(pngs), PER_SHEET):
-        chunk = pngs[k:k + PER_SHEET]
-        rows = (len(chunk) + COLS - 1) // COLS
-        sheet = Image.new("RGB", (COLS * w + (COLS - 1) * 4, rows * (h + cap + 4)), "#05060a")
+    for k in range(0, len(tiles), PER_SHEET):
+        chunk = tiles[k:k + PER_SHEET]
+        rows = (len(chunk) + cols - 1) // cols
+        sheet = Image.new("RGB", (cols * w + (cols - 1) * 4, rows * (h + cap + 4)), "#05060a")
         d = ImageDraw.Draw(sheet)
-        for i, p in enumerate(chunk):
-            x, y = (i % COLS) * (w + 4), (i // COLS) * (h + cap + 4)
-            sheet.paste(Image.open(p).convert("RGB").resize(TILE), (x, y))
-            b = beats[k + i] if k + i < len(beats) else {"t": 0, "text": ""}
-            txt = f"{k + i + 1}  {b['t']:.1f}s  {b['text'] or '(wipe)'}"
+        for i, (n, p, b) in enumerate(chunk):
+            x, y = (i % cols) * (w + 4), (i // cols) * (h + cap + 4)
+            sheet.paste(Image.open(p).convert("RGB").resize(tile), (x, y))
+            txt = f"{n}  {b['t']:.1f}s  {b['text'] or '(wipe)'}"
             while d.textlength(txt, font=font) > w - 8 and len(txt) > 4:
                 txt = txt[:-2].rstrip() + "…"
             d.text((x + 4, y + h + 4), txt, fill="#c8ccd6", font=font)
         path = out if k == 0 else out.with_name(f"{out.stem}.{k // PER_SHEET + 1}.png")
         sheet.save(path)
         paths.append(path)
+    return paths
+
+
+def beat_tiles(snapdir):
+    beats = json.loads((snapdir / "beats.json").read_text()) if (snapdir / "beats.json").exists() else []
+    return [(i + 1, p, beats[i] if i < len(beats) else {"t": 0, "text": ""})
+            for i, p in enumerate(sorted(snapdir.glob("[0-9][0-9].png")))]
+
+
+def board(snapdir, out):
+    """Tile a scene's beat stills into captioned storyboard sheet(s). Returns (paths, changed?)."""
+    tiles = beat_tiles(snapdir)
+    if not tiles:
+        return [], False
+    digest = hashlib.sha1(b"".join(p.read_bytes() for _, p, _ in tiles)
+                          + json.dumps([{k: b[k] for k in ("t", "text") if k in b} for _, _, b in tiles]).encode()).hexdigest()
+    sha = out.with_suffix(".sha")
+    changed = not sha.exists() or sha.read_text() != digest
+    paths = tiled(tiles, out)
     sha.write_text(digest)
     return paths, changed
+
+
+def beat_diff(snapdir, out):
+    """`mtk check --agent`: which beats' pictures differ from the last check of this scene, as (lines, sheet paths,
+    number changed, number of beats). A beat is matched by its narration, so inserting one doesn't mark everything after it as changed. A sheet holds
+    only the changed beats; each line names what moved, so a fix can often be confirmed without opening an image."""
+    tiles = beat_tiles(snapdir)
+    mem = out.with_suffix(".beats.json")
+    old = json.loads(mem.read_text()) if mem.exists() else None
+    now = [dict(b, sha=hashlib.sha1(p.read_bytes()).hexdigest()) for _, p, b in tiles]
+    mem.write_text(json.dumps(now))
+    seen = {(b["text"], b["sha"]) for b in old or []}
+    fresh = [t for t, b in zip(tiles, now) if (b["text"], b["sha"]) not in seen]
+    lines = []
+    for n, _, b in fresh if old is not None else []:
+        was = next((x["on"] for x in old if x["text"] == b["text"]), None)
+        head = f"beat {n} {b['t']:.1f}s {(b['text'] or '(wipe)')[:48]!r}"
+        lines.append(f"{head}: new beat" if was is None else f"{head}: {on_screen_diff(was, b['on'])}")
+    sheet = out.with_name(f"{out.stem}.diff.png")
+    return lines, tiled(fresh, sheet) if fresh else [], len(fresh), len(tiles)
+
+
+def on_screen_diff(was, now):
+    """What changed in the visible text, or that only the rest of the picture did."""
+    out = [f"+{k}" for k in now if k not in was] + [f"-{k}" for k in was if k not in now]
+    for k in now:
+        if k in was and now[k] != was[k]:
+            a, b = was[k], now[k]
+            what = ("color " + b[4]) if a[:4] == b[:4] else f"({a[0]},{a[1]})->({b[0]},{b[1]})"
+            out.append(f"~{k} {what}")
+    return " ".join(out)[:240] or "same text, other shapes changed"
 
 
 HEAD = re.compile(r"^#+\s*(S\d+\w*)(?:[^\[]*\[(\d+)\])?")
@@ -361,18 +413,34 @@ def check(a):
     def one(fs):
         f, s = fs
         snaps = Path("media/snaps") / f"{Path(f).stem}.{s}.{os.getpid()}"
+        out = Path("media/board") / f"{Path(f).stem}.{s}.png"
+        if a.at:  # full-size stills at chosen moments, on the final render's clock
+            ok, ls = manim(f, s, ["-qh", "--frame_rate", "30", "--dry_run", "--disable_caching"],
+                           {"MTK_SNAP": str(snaps.resolve()), "MTK_AT": a.at})
+            res = (tiled(beat_tiles(snaps), out.with_name(f"{out.stem}.at.png"), (960, 540), 2), True) if ok else ([], False)
+            shutil.rmtree(snaps, ignore_errors=True)
+            return ok, ls, res, None, None
         ok, ls = manim(f, s, ["-ql", "--dry_run", "--disable_caching", "--frame_rate", "10"],
                        {"MTK_SNAP": str(snaps.resolve())})
-        res = board(snaps, Path("media/board") / f"{Path(f).stem}.{s}.png") if ok else ([], False)
+        res = board(snaps, out) if ok else ([], False)
+        diff = beat_diff(snaps, out) if ok and a.agent else None
         pal = json.loads((snaps / "palette.json").read_text()) if (snaps / "palette.json").exists() else None
         shutil.rmtree(snaps, ignore_errors=True)
-        return ok, ls, res, pal
+        return ok, ls, res, pal, diff
 
     with cf.ThreadPoolExecutor(a.jobs or slots()) as ex:
         results = list(ex.map(one, pairs))
+    if a.at:
+        for (f, s), (ok, ls, (paths, _), _, _) in zip(pairs, results):
+            if not ok:
+                failure(f, s, ls)
+            print(*paths, sep="\n")
+        return
+    if a.agent:
+        return agent_report(pairs, results)
     total = words = nlint = 0
     fresh = []
-    for (f, s), (ok, ls, (paths, changed), _) in zip(pairs, results):
+    for (f, s), (ok, ls, (paths, changed), _, _) in zip(pairs, results):
         if not ok:
             failure(f, s, ls)
             continue
@@ -393,6 +461,31 @@ def check(a):
     drift(pairs, [r[3] for r in results])
     print(f"TOTAL {int(total // 60)}:{int(total % 60):02d}  {words} words  {nlint} lint  "
           f"{len(fresh)} new/changed storyboard(s) to look at; unchanged ones are marked [same]")
+
+
+def agent_report(pairs, results):
+    """`mtk check --agent`: same checks as mtk check, but only what changed since the last one, and what reading it costs."""
+    from PIL import Image
+    total = nlint = changed = beats = cost = 0
+    for (f, s), (ok, ls, _, _, diff) in zip(pairs, results):
+        if not ok:
+            failure(f, s, ls)
+            continue
+        ms = marks(ls)
+        rep = next((m for m in ms if m.startswith("REPORT")), "REPORT ? 0s 0w")
+        total += float(re.search(r" ([\d.]+)s", rep).group(1))
+        lint = [m for m in ms if m.startswith("LINT")]
+        nlint += len(lint)
+        lines, sheets, n, of = diff
+        changed, beats = changed + n, beats + of
+        cost += sum(w * h // 750 for w, h in (Image.open(p).size for p in sheets))  # Claude's image token estimate
+        print(f"{Path(f).stem} {s}  {rep.split(' ', 2)[2]}  {n}/{of} beats changed"
+              + "".join(f"  {p}" for p in sheets))
+        for m in lint + lines:
+            print("   ", m)
+    drift(pairs, [r[3] for r in results])
+    print(f"TOTAL {int(total // 60)}:{int(total % 60):02d}  {nlint} lint  {changed}/{beats} beats changed  "
+          f"~{cost} image tokens to look at them")
 
 
 def drift(pairs, pals):
@@ -461,12 +554,48 @@ def vtt(chapters, path):
     return path
 
 
+def scene_key(f, s, q):
+    """A hash of what a rendered scene depends on: its file, the kits and scene files it names, the toolkit, data files
+    beside it, and (while draft voices exist, since a real voice can replace one) which voices are cached."""
+    src = Path(f).read_bytes()
+    pkg = Path(importlib.util.find_spec("mtk").origin).parent
+    h = hashlib.sha1(f"{s} {q} {os.environ.get('MTK_TTS')}".encode() + src)
+    for p in sorted(pkg.glob("*.py")) + sorted(x for x in Path(".").glob("*.py") if x.name != Path(f).name):
+        if p.parent == pkg or not SCENE.search(p.read_text(errors="ignore")) or re.search(rb"\b%s\b" % p.stem.encode(), src):
+            h.update(p.read_bytes())
+    for p in sorted(x for x in Path(".").glob("*") if x.is_file() and x.suffix not in (".py", ".md")):
+        h.update(f"{p.name} {p.stat().st_size} {p.stat().st_mtime_ns}".encode())
+    names = sorted(x.name for x in Path(Path(f).parent / "audio").glob("*.wav"))
+    if any(n.endswith(".say.wav") for n in names):
+        h.update(" ".join(names).encode())
+    return h.hexdigest()
+
+
 def render(a):
     pairs = find(a.files, a.scene)
     prefetch(pairs)
     flags, res = QUAL[a.q]
+
+    def agent(fs):
+        f, s = fs
+        vid = Path("media/videos") / Path(f).stem / res / f"{s}.mp4"
+        stamp, key = vid.with_suffix(".key"), scene_key(f, s, a.q)
+        if vid.exists() and stamp.exists() and stamp.read_text() == f"{key} {vid.stat().st_mtime_ns}":
+            return True, [f"AGENT {s} 0 plays 0 reused 0/0 frames drawn"]  # nothing it depends on changed: don't even run it
+        ok, ls = manim(f, s, [*flags, "--disable_caching", "--progress_bar", "none"], {"MTK_AGENT": "1"}, slot=False)
+        if ok:
+            stamp.write_text(f"{key} {vid.stat().st_mtime_ns}")
+            return ok, ls
+        print(f"agent renderer failed on {s}; rendering it the classic way", flush=True)  # same pixels, just slower
+        return manim(f, s, flags)
+
     with cf.ThreadPoolExecutor(a.jobs or slots()) as ex:
-        results = list(ex.map(lambda fs: manim(*fs, flags), pairs))
+        results = list(ex.map(agent if a.agent else lambda fs: manim(*fs, flags), pairs))
+    if a.agent:
+        got = [re.search(r"(\d+) plays (\d+) reused (\d+)/(\d+)", m).groups() for _, ls in results for m in marks(ls)
+               if m.startswith("AGENT")]
+        p, r, d, n = (sum(int(x[i]) for x in got) for i in range(4))
+        print(f"agent: drew {d}/{n} frames; reused {r}/{p} plays")
     bad = False
     for (f, s), (ok, ls) in zip(pairs, results):
         if not ok:
@@ -830,6 +959,14 @@ def new(a):
     print(b)
 
 
+def make(a):
+    from mtk_make import make as go
+    d = Path(a.dir).expanduser() if a.dir else Path.home() / "Movies/Explainers" / re.sub(r"\W+", "-", a.topic.lower()).strip("-")[:40]
+    d.mkdir(parents=True, exist_ok=True)
+    os.chdir(d)
+    go(a)
+
+
 def serve(a):
     from mtk_serve import serve as run
     run(Path(a.dir) if a.dir else (Path("web") if Path("web/index.html").exists() else Path(".")), a.port)
@@ -889,6 +1026,10 @@ def main():
         c.add_argument("files", nargs="*")
         c.add_argument("-s", "--scene", action="append", help="scene name prefix(es), comma-separated or repeated")
         c.add_argument("-j", "--jobs", type=int)
+        c.add_argument("--agent", action="store_true", help="the agent renderer: only what changed since last time "
+                       "is reported (check) or drawn (render)")
+        if name == "check":
+            c.add_argument("--at", help="full-size stills at these scene times, comma-separated, e.g. 12.4,15 (no video)")
         if name == "render":
             c.add_argument("-q", default="h", choices=QUAL)
             c.add_argument("-o", help="output name (default: the file, or this folder for several)")
@@ -931,6 +1072,12 @@ def main():
     c.add_argument("--walk", action="store_true", help="exam walkthrough brief instead of a series")
     c.add_argument("--dir", help="folder (default ~/Movies/Explainers/SLUG)")
     c.set_defaults(fn=new)
+    c = sub.add_parser("make")
+    c.add_argument("topic", help="the topic, or a path to notes or a paper, as you would ask for the video")
+    c.add_argument("--minutes", type=int, default=10)
+    c.add_argument("--dir", help="project folder (default ~/Movies/Explainers/<topic slug>)")
+    c.add_argument("-q", default="h", choices=QUAL)
+    c.set_defaults(fn=make)
     c = sub.add_parser("frames")
     c.add_argument("video")
     c.add_argument("sec", nargs="+")
