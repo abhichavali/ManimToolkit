@@ -5,6 +5,7 @@ time; animations inside the block take run_time fractions of d, and the block wa
 `self.beat("text", anim1, [anim2, anim3], 0.1, anim4)` is the one-liner form: steps play in order and share the clip.
 Key: OPENROUTER_API_KEY, else the file named by OPENROUTER_KEY_FILE, else ~/.config/manim-explainer/openrouter_key.
 """
+import fcntl
 import hashlib
 import json
 import os
@@ -22,6 +23,7 @@ import manimpango
 import numpy as np
 import svgelements as se
 from manim import *
+from manim.mobject.text import tex_mobject
 from manim.mobject.text.text_mobject import PangoUtils
 from manim.utils.family import extract_mobject_family_members
 
@@ -89,6 +91,18 @@ def _generate_mobject(self):
     return self
 
 
+def _tex_to_svg_file(expression, environment=None, tex_template=None, _make=tex_mobject.tex_to_svg_file):
+    """manim's LaTeX cache, one expression at a time across processes: a scene reading a .dvi another is still writing
+    fails, and a check that fails twice shows its writer a crash that isn't there."""
+    d = config.get_dir("tex_dir")
+    d.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha1(f"{expression}|{environment}".encode()).hexdigest()[:16]
+    with open(d / f".{key}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _make(expression, environment, tex_template)
+
+
+tex_mobject.tex_to_svg_file = _tex_to_svg_file
 _text2svg = manimpango.text2svg
 manimpango.text2svg = lambda s, size, ls, lig, path, *a: (_replace(path, lambda t: _text2svg(s, size, ls, lig, t, *a)), path)[1]
 PangoUtils.remove_last_M = staticmethod(_remove_last_m)
