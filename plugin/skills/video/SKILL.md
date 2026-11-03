@@ -262,6 +262,9 @@ j k l n p c) next to copies of the videos, and prints the publish plan: Artifact
 `index.html` and `files` = batch 1, then each later batch to the same url (64 MB per publish, 15 MB per file).
 With a guide, the page pauses the video at every checkpoint and shows that checkpoint's problem from the PDF;
 publish it with `capabilities: {"downloads": true}` so viewers can save the guide.
+**Videos on YouTube**, if the user wants them there: they upload `out/<stem>.mp4` as Unlisted with Allow embedding on
+(by hand: API uploads from unaudited projects are locked private), then `mtk youtube ep01=URL ...` and `mtk site`. Such
+a page can't be an artifact, since artifacts refuse embeds: don't publish it, use `mtk serve` or a static host.
 **Chat under each video** comes on by itself when an Anthropic API key is found (`$ANTHROPIC_API_KEY`, else a
 `.anthropic_api_key` file in the project folder, else `~/.anthropic_api_key`; `mtk site` prints `chat: on` or
 `off`; no key, no chat box). Viewers ask a question and Claude (Sonnet) answers from that video's transcript,

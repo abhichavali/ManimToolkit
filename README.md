@@ -19,7 +19,7 @@ tokens and wall-clock time the old `manim-explainer` skill spent, without changi
 | `mtk/site/guide.tex`, `mtk/site/mtkguide.sty` | The study-guide template and its checkpoint macros (`mtk guide`) |
 | `mtk_serve.py` | `mtk serve`: the study site on localhost, plus the chat endpoint that answers with your API key |
 | `mtk/agent.py` | The agent renderer (`mtk render --agent`): fingerprinted, forked, reused segments |
-| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `script`, `check`, `render`, `episodes`, `guide`, `site`, `serve`, `frames`, `recipe` |
+| `mtk_cli.py` | The `mtk` command: `new`, `voice`, `brief`, `script`, `check`, `render`, `episodes`, `youtube`, `guide`, `site`, `serve`, `frames`, `recipe` |
 | `plugin/` | The skill: `SKILL.md` (coordinator), `API.md` (the one page scene writers read), problem-set and mind-blow docs |
 | `tests/` | `python tests/test_check.py`: every lint rule fires, storyboards, briefs, captions and the site build (offline voice, no API cost); `tests/serve.py`: a local server without range support, like the artifact file server; `tests/mock_anthropic.py`: a stand-in Messages API for the chat tests |
 
@@ -190,6 +190,34 @@ Conversations are per video and per viewer (localStorage), with Stop and Clear.
 - **Published** as an artifact (the plan says to pass `capabilities: {"sample": {}}`), the same box asks Claude
   through each viewer's own claude.ai account, so no key is involved at all.
 
+### Hosting the videos on YouTube
+
+Upload `out/<stem>.mp4` (the full-quality join, not the compressed `web/` copy) in YouTube Studio as Unlisted, with
+Allow embedding on. Then:
+
+```bash
+mtk youtube ep01=https://youtu.be/ID ep02=https://youtu.be/ID
+```
+
+```bash
+mtk site
+```
+
+The page embeds those videos and no longer ships their files. Chapters, checkpoints, resume, keys, the transcript and
+chat all keep working, and captions come from the page's own cues. `mtk youtube` alone lists what's where; `ep01=` puts
+a video back on its local file. Rebuilding a video with `mtk episodes` also puts it back, because its chapters and
+checkpoints now follow the new build and the old upload may not match them.
+
+- **Not on claude.ai artifacts.** They refuse all embeds, so `mtk site` prints no publish plan for such a page, and
+  there the video shows its poster and a link to YouTube. Use `mtk serve` or any static host, over http(s): YouTube
+  rejects `file://` pages. On a static host there is no chat box, since nothing holds the key.
+- **Uploading stays manual.** YouTube locks API uploads from unaudited projects to private, and private videos can't
+  be embedded.
+- **Long videos.** YouTube needs a verified account for uploads over 15 minutes.
+- **Pausing.** YouTube may draw its own suggestions over a paused video, including at a checkpoint.
+
+Checked with `python3 tests/test_youtube.py`, and in the desktop app's Chromium pane against a stand-in for YouTube's
+player and against a blocked `iframe_api` script. Not yet checked against the real YouTube player.
 ## Explaining, not summarizing
 
 Past scripts were often correct but compressed: they named an idea, stated the result and moved on, leaving the

@@ -13,6 +13,8 @@
                                            and picture, with ids (S03.2); no facts or plan (for the cold read)
   mtk episodes BRIEF.md [ep03 p02 ..]      after render: per episode (or problem) out/<stem>.mp4, web/<stem>.mp4
                                            under the artifact's 15 MB cap, poster .jpg, captions .vtt, web/episodes.json
+  mtk youtube [ep01=URL ..]                after you upload out/<stem>.mp4 as Unlisted: the site embeds it from YouTube
+                                           instead of shipping the file (not on claude.ai artifacts, which refuse embeds)
   mtk site [--title T] [--blurb B] [--out DIR]   after episodes: web/index.html, a study page around the videos
                                            (chapters, captions + transcript built in, resume, Chromium-safe seeking)
                                            plus the artifact publish plan (file maps in batches under 64 MB)
@@ -689,6 +691,10 @@ def episodes(a):
         cues = full.with_suffix(".vtt")
         if cues.exists():
             shutil.copy(cues, web.with_suffix(".vtt"))
+        was = man.get(g["stem"], {}).get("youtube")
+        if was:  # chapters and checkpoints now follow this build, so the old upload may be out of sync with them
+            print(f"{g['stem']}: rebuilt, so it plays its local file again. Upload {full} and run mtk youtube "
+                  f"{g['stem']}=URL (or {g['stem']}={was} if the picture and timing didn't change)")
         man[g["stem"]] = dict(stem=g["stem"], kind=g["kind"], n=g["n"], title=g["title"], sub=g["sub"],
                               file=web.name, poster=poster.name,
                               captions=web.with_suffix(".vtt").name if cues.exists() else None,
@@ -699,6 +705,46 @@ def episodes(a):
               f"at crf {crf}{over}")
     mpath.write_text(json.dumps(sorted(man.values(), key=lambda e: (e["kind"], e["n"])), indent=1, ensure_ascii=False))
     print(f"{mpath}: {len(man)} videos, {sum(e['duration'] for e in man.values()) / 60:.1f} min")
+
+
+YT_ID = re.compile(r"(?:^|v=|youtu\.be/|/embed/|/shorts/|/live/)([\w-]{11})(?:$|[?&#/])")
+
+
+def youtube(a):
+    """`mtk youtube ep01=URL ..`: these videos play from YouTube on the site (`ep01=` puts one back on its local file).
+    No arguments: what's where. Uploading is by hand: YouTube locks API uploads from unaudited projects to private."""
+    import urllib.error
+    import urllib.request
+    mpath = Path("web/episodes.json")
+    if not mpath.exists():
+        sys.exit("no web/episodes.json here: run mtk episodes first")
+    vids = json.loads(mpath.read_text())
+    by = {e["stem"]: e for e in vids}
+    for pair in a.pairs:
+        stem, eq, url = pair.partition("=")
+        if not eq or stem not in by:
+            sys.exit(f"{pair}: expected STEM=URL with STEM one of {' '.join(by)}")
+        if not url:
+            by[stem].pop("youtube", None)
+            continue
+        m = YT_ID.search(url.strip())
+        if not m:
+            sys.exit(f"{pair}: no YouTube video id in that")
+        try:
+            urllib.request.urlopen(f"https://www.youtube.com/oembed?format=json&url=https://youtu.be/{m[1]}", timeout=15)
+        except urllib.error.HTTPError as e:
+            sys.exit(f"{stem}: YouTube won't embed {m[1]} (HTTP {e.code}): it must exist, be Unlisted or Public, and "
+                     "have Allow embedding on")
+        except urllib.error.URLError as e:
+            print(f"{stem}: couldn't reach YouTube to check {m[1]} ({e.reason}); saved anyway")
+        by[stem]["youtube"] = m[1]
+    if a.pairs:
+        mpath.write_text(json.dumps(vids, indent=1, ensure_ascii=False))
+    for e in vids:
+        print(f"{e['stem']}  " + (f"https://youtu.be/{e['youtube']}" if e.get("youtube")
+                                  else f"local (upload out/{e['stem']}.mp4 as Unlisted, then mtk youtube {e['stem']}=URL)"))
+    if a.pairs:
+        print("now run mtk site")
 
 
 def guide(a):
@@ -790,6 +836,8 @@ def _videos(web, slug=""):
     guides = [json.loads(g.read_text()) for g in sorted(web.glob("guide*.json"))]
     pre, files = f"{slug}/" if slug else "", {}
     for e in vids:
+        if e.get("youtube"):  # plays from YouTube: the page neither needs nor ships the file
+            e.pop("file", None)
         f = web / (e.get("captions") or "")
         e["cues"] = _cues(f.read_text()) if e.get("captions") and f.exists() else []
         e.pop("captions", None)
@@ -833,6 +881,12 @@ def site(a):
                     entry.setdefault("files", []).append({"title": d["title"], "path": f"{s['slug']}/{src.name}"})
                 else:
                     print(f"{s['name']}: {src} not found (skipped)")
+            if s.get("quiz"):  # a question bank for the subject's tab: {"title", "questions": [{id, ch, topic, q, choices, answer, why, ep}]}
+                qf = Path(s["dir"]).expanduser() / s["quiz"]
+                if qf.exists():
+                    entry["quiz"] = json.loads(qf.read_text())
+                else:
+                    print(f"{s['name']}: {qf} not found (no quiz yet)")
             subjects.append(entry)
     else:
         if not Path("web/episodes.json").exists():
@@ -867,6 +921,11 @@ def site(a):
             shutil.copy2(src, dst)
     guided = any(e.get("guide") for e in vids)
     print(f"{(out / 'index.html').resolve()}  ({len(vids)} videos, {sum((out / f).stat().st_size for f in files) / 1e6:.1f} MB)")
+    tubed = sum(1 for e in vids if e.get("youtube"))
+    if tubed:  # no publish plan: claude.ai artifacts refuse embeds, so these videos would only show a link there
+        print(f"host: {tubed} of {len(vids)} videos embed from YouTube, which claude.ai artifacts refuse. Run mtk serve, or "
+              f"put {out.resolve()} on any static host (over http(s): YouTube rejects file:// pages)")
+        return
     batches, cur, size = [], {}, 0
     for f in files:  # one publish carries at most 64 MB: batch the files, all published to the same artifact
         b = (out / f).stat().st_size
@@ -1053,6 +1112,9 @@ def main():
     c.add_argument("--crf", type=int, default=22, help="first x264 quality to try (higher = smaller; skips passes known to be too big)")
     c.add_argument("--mb-per-min", type=float, help="also cap at this many MB per minute (a site-wide budget)")
     c.set_defaults(fn=episodes)
+    c = sub.add_parser("youtube")
+    c.add_argument("pairs", nargs="*", metavar="STEM=URL", help="e.g. ep01=https://youtu.be/ID; ep01= goes back to the local file")
+    c.set_defaults(fn=youtube)
     c = sub.add_parser("site")
     c.add_argument("--title", help="the page heading (default: the brief's title); its tab name stops at a colon")
     c.add_argument("--kicker", help="small line above the title, e.g. the course")
