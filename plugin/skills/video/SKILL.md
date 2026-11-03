@@ -231,7 +231,7 @@ waves of ~10 to stay clear of usage limits.
 
 ## 5. Review as the viewer, with the render running
 
-- When every agent has reported, start `cd "$P" && mtk render` in the background (1080p30, every scene in
+- When every agent has reported, start `cd "$P" && mtk render --agent` in the background (1080p30, every scene in
   parallel on global render slots), and review while it runs.
 - `mtk check` (fast: everything is cached) for the lint lines and lengths, then read every storyboard once,
   all in one message with parallel Reads (`media/board/*.png`: a still per beat, captioned with its narration). Is each idea obvious from the picture?
@@ -240,8 +240,10 @@ waves of ~10 to stay clear of usage limits.
   Does every beat show what its words say? Anything cluttered, static, off-palette? Is the rigor all there?
   Continuity across scenes (notation, colors, callbacks)? A `DRIFT` line means a concept changes color between
   scenes: send it to the scenes' agents.
-- Send fixes to the scene's agent (SendMessage: beat number, what's wrong). When they're done, run `mtk render`
-  again: manim's cache skips every unchanged animation, so only the fixed scenes re-render.
+- Send fixes to the scene's agent (SendMessage: beat number, what's wrong). When they're done, run
+  `mtk render --agent` again: only the plays whose pictures changed are drawn, and unchanged scenes don't run.
+  Use `--agent` for every render, the first too: frames match a cold render exactly, while plain `mtk render`'s
+  cached re-renders drift from one (0.7 s over 12 min).
 - Series over ~30 minutes: give each episode's board review to a fresh agent that returns notes, so your own
   context doesn't fill with images.
 
@@ -260,6 +262,9 @@ j k l n p c) next to copies of the videos, and prints the publish plan: Artifact
 `index.html` and `files` = batch 1, then each later batch to the same url (64 MB per publish, 15 MB per file).
 With a guide, the page pauses the video at every checkpoint and shows that checkpoint's problem from the PDF;
 publish it with `capabilities: {"downloads": true}` so viewers can save the guide.
+**Videos on YouTube**, if the user wants them there: they upload `out/<stem>.mp4` as Unlisted with Allow embedding on
+(by hand: API uploads from unaudited projects are locked private), then `mtk youtube ep01=URL ...` and `mtk site`. Such
+a page can't be an artifact, since artifacts refuse embeds: don't publish it, use `mtk serve` or a static host.
 **Chat under each video** comes on by itself when an Anthropic API key is found (`$ANTHROPIC_API_KEY`, else a
 `.anthropic_api_key` file in the project folder, else `~/.anthropic_api_key`; `mtk site` prints `chat: on` or
 `off`; no key, no chat box). Viewers ask a question and Claude (Sonnet) answers from that video's transcript,

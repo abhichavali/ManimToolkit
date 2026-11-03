@@ -17,7 +17,7 @@ mtk = "mtk_cli:main"
 
 [tool.setuptools]
 packages = ["mtk"]
-py-modules = ["mtk_cli", "mtk_serve"]
+py-modules = ["mtk_cli", "mtk_serve", "mtk_make"]
 
 [tool.setuptools.package-data]
 mtk = ["site/*.html", "site/*.sty", "site/*.tex"]
