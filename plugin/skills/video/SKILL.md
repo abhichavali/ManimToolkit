@@ -44,9 +44,12 @@ mtk recipe >/dev/null && ffmpeg -version | head -1 && which pdflatex && (test -s
 
 - If the user gave a source (notes, paper, lecture, homework), read all of it, once, yourself. Otherwise work
   from what you know and look up anything you're unsure of.
-- Pin down the viewer literally: what they already know (courses, tools, notation) and what they don't. When
-  unsure, assume one level less: anything taught in the topic's own course is new to them and gets explained.
-  Default anything else you can.
+- Pin down the viewer literally: what they already know (courses, tools, notation) and what they don't. Assume
+  little. List only what they have certainly used, not what a course "covered"; when unsure, assume one level
+  less. Anything taught in the topic's own course is new to them and gets explained. Default anything else you can.
+- Find the stakes: the real problem this topic solves, and what goes wrong, or stays impossible, without it. Make
+  it concrete: a situation the viewer could be in or has heard of, such as a diagnosis, a bridge or a forecast.
+  For each idea the video will need, write down the immediate problem it solves at that point in the story.
 - Do the math before planning: derivations, the worked example, every number, checked with throwaway
   numpy/sympy. Find where the intuition breaks and what the rigorous version needs.
 - Find the crux: the one or two steps where understanding is actually won or lost. That's the step students get
@@ -76,10 +79,12 @@ that before any beat. `mtk voice`, `mtk brief` and `mtk script` parse this forma
 eigenvalues of a 2×2"). Everything else is explained on screen before it's used.
 **Hook**: the concrete question or picture of the first 20 s. **Insight**: the one sentence the viewer keeps.
 **Payoff**: how the ending answers the hook.
+**Stakes**: the real problem this solves and what goes wrong without it, as a concrete situation.
 **Crux**: the one or two steps where understanding is won or lost, and the misconception each must defeat.
-**Ladder**: the ideas in teaching order, each resting only on Knows and earlier rungs, tagged and timed:
-1. (support, 0:45) why the naive approach fails
-2. (core, 2:30) <the crux step>
+**Ladder**: the ideas in teaching order, each resting only on Knows and earlier rungs, tagged and timed, each with
+the immediate problem it solves:
+1. (support, 0:45) why the naive approach fails, because <what we're stuck on at this point>
+2. (core, 2:30) <the crux step>, because <the problem it removes>
 3. (aside, cut) <the history, the generalization, the side result>
 
 Every file starts:
@@ -107,6 +112,15 @@ Picture: one or two lines: the layout and what's on screen overall; recipes to b
 
 A series: put `# Episode N: Title | subtitle` above each episode's scenes; `mtk episodes` builds one video per
 episode from these headings. Text after `[budget]` becomes the scene's chapter label.
+- **Episode 1 is always a short overview of the whole series** (about 3 to 5 minutes), with zero rigor: no
+  derivations, no formal definitions, no notation beyond what a picture needs. Its job is a physical feel for why
+  the material is useful. Start from a real situation, then walk through the series' topics in order, each one
+  arriving as the answer to a problem the previous one left open, so the viewer sees what each episode is for
+  before learning any of it. It ends with the map of the episodes to come. The rigor starts in Episode 2.
+- **Build and push a series in chronological order, one episode at a time.** Write the scenes, review, render and
+  upload or publish Episode N (`mtk episodes`, then the site, artifact or YouTube step the user is using) before
+  starting Episode N+1's scenes. Steps 4 to 6 run once per episode, not once for the whole series. Never work on
+  episodes out of order or in parallel.
 
 - Draft straight into the file (teaching plan, then scene list and budgets, then the beats), not in your head
   first: the brief is the one long sequential step, and writing it twice (once in thinking, once in the file)
@@ -133,6 +147,32 @@ episode from these headings. Text after `[budget]` becomes the scene's chapter l
 is correct but compressed: it names an idea, states the result and moves on, every beat at the same speed and
 weight, and leaves the viewer to infer the steps and to guess what mattered. A viewer who knows only the Knows line
 must follow every beat without stopping to rebuild a step, and must always know which moments matter most.
+
+*Why, the whole way through.* Exposition is heavy, as in 3Blue1Brown: at every moment the viewer can say why
+they're learning this and what problem it solves right now. A topic that is only correct and never motivated is
+the failure here.
+- **Stakes before substance.** Before any machinery, show the real problem: who needs this, what it lets them do,
+  and what goes wrong without it. Use a concrete case, such as a misdiagnosis, a failed design or a wrong forecast.
+  Give it real time, about a minute of a 10-minute video, not one sentence. It is not an "applications" slide
+  tacked on at the end; it is the reason the video exists.
+- **Every idea earns its place.** Before a new idea, the viewer can name the problem it fixes right now ("we're
+  stuck because ...; this gets us unstuck"). Right after it, show its immediate effect on the example: what we can
+  now do that we couldn't a minute ago. An idea with no problem waiting for it moves later or is cut.
+- **Keep the thread visible.** Each section opens by restating the big question and where this piece fits in it.
+  A viewer who drifts off for a scene should be able to rejoin and know why they're there.
+- **Never lose the forest for the trees.** Whenever a stretch introduces a lot (several new ideas, a long
+  derivation, a run of definitions), stop and zoom out: a recap beat that puts everything covered so far back on
+  screen as one picture or short list, says how the pieces connect, and points at where we are on the way to the
+  big question. Do this every 2 to 3 minutes in dense material and after every third new idea at the latest, and
+  recap the whole video so far, not only the last scene. In a series, each episode opens with a recap of the
+  earlier episodes and where this one sits on the map from Episode 1.
+- **Exposition with the rigor, never instead of it.** Every rigorous step (a definition, a derivation, a proof)
+  comes wrapped in plain talk: what we're about to do and why, the step itself, then what it just told us in
+  everyday words and on the example. The rigor stays complete; the exposition is what makes it land.
+- **Explain more than feels necessary.** You know the topic too well to feel what's missing. Remind the viewer of
+  a prerequisite in a sentence even when it's in Knows. Say each formula in plain words, and give one more example
+  where a viewer might hesitate. Exposition is not padding: it is the reason, the meaning and the example. When the
+  runtime doesn't fit, cut scope, never the exposition.
 
 *Setup.*
 - Open on the hook, then set it up properly: the question stated precisely, what we're given, and where we're
@@ -187,7 +227,8 @@ verbatim:
 > every place where you would: meet a term, symbol or fact you don't know that hasn't been explained yet (gap);
 > be told a conclusion without seeing why (why); have to fill in a step the video skipped (jump); get two new
 > ideas at once, or a new one before the last was used (dense); lose track of why the video is doing what it's
-> doing, or where it's headed (lost); want it to slow down, show it again or give an example (slow); see a key
+> doing, or where it's headed (lost); not know why this matters or what problem a new idea solves for you
+> (stakes); want it to slow down, show it again or give an example (slow); see a key
 > point go by without being flagged as important or given time to land (flat); or sit through something that
 > doesn't serve the main idea (cut). Don't fill gaps from your own expertise: if the viewer would be confused,
 > say so. Then, as a teacher: state the video's main idea in one sentence from the script alone, name the beats
@@ -204,7 +245,7 @@ cached) and prints each scene's length against its `[budget]`. It also flags:
 - beats too dense to follow.
 
 Then fix the brief in one pass:
-- every gap, why and jump the review found, and the rest by judgment;
+- every gap, why, jump and stakes note the review found, and the rest by judgment;
 - every hand-wave, and the timing.
 
 Fixing usually means more beats at the crux and fewer elsewhere, so rebalance the budgets. Run `mtk voice` once
