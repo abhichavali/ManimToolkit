@@ -13,7 +13,11 @@ Plan briefly, write the scene in one go, then let `mtk check` and the storyboard
 ```bash
 mtk check s03_squares.py   # dry run, no video, a few seconds: LINT/REPORT lines + the scene's storyboard PNG
 mtk check v2_x.py -s S03   # one scene of a multi-scene file (prefixes, comma-separated)
+mtk check s03.py --agent   # after the first look: only the beats that changed, what moved, and a sheet of just those
+mtk check s03.py -s S03 --at 12.4,15   # full-size stills mid-animation, without rendering any video
 ```
+- From your second check on use `--agent`. `beat 3 ...: ~'x^2' (0,1)->(0,2)` often confirms a fix without an image;
+  otherwise read the `.diff.png` it names, never the whole board again. Use `--at` when motion is the question.
 - One line per scene: length, words/budget, beats, warnings, storyboard path, `[NEW ]` or `[same]`. A crash
   prints `FAILED`, the line in your file and the exception, so you never need to open a log.
 - A **storyboard** is one image per scene: a still at the end of every beat, captioned with its time and narration.

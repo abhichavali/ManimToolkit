@@ -5,6 +5,7 @@ time; animations inside the block take run_time fractions of d, and the block wa
 `self.beat("text", anim1, [anim2, anim3], 0.1, anim4)` is the one-liner form: steps play in order and share the clip.
 Key: OPENROUTER_API_KEY, else the file named by OPENROUTER_KEY_FILE, else ~/.config/manim-explainer/openrouter_key.
 """
+import fcntl
 import hashlib
 import json
 import os
@@ -14,11 +15,16 @@ import time
 import urllib.error
 import urllib.request
 import wave
+import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
 
+import manimpango
 import numpy as np
+import svgelements as se
 from manim import *
+from manim.mobject.text import tex_mobject
+from manim.mobject.text.text_mobject import PangoUtils
 from manim.utils.family import extract_mobject_family_members
 
 # ---------- look ----------
@@ -50,6 +56,57 @@ config.no_latex_cleanup = True  # parallel renders share media/Tex; cleanup dele
 tpl = TexTemplate(documentclass=r"\documentclass{article}")  # BasicTeX has no standalone.cls
 tpl.preamble = r"\usepackage{amsmath}\usepackage{amssymb}\pagestyle{empty}"
 config.tex_template = tpl
+
+
+def _replace(path, write):
+    tmp = f"{path}.{os.getpid()}.svg"
+    write(tmp)
+    os.replace(tmp, path)
+
+
+def _remove_last_m(path, _strip=PangoUtils.remove_last_M):
+    """manim rewrites this shared cache file in place on every Text(): one scene's read of another's truncation
+    leaves it empty, and every scene using that text then fails until it's deleted. Scenes running at once share it."""
+    src = Path(path).read_text()
+    if not src:
+        Path(path).unlink(missing_ok=True)  # emptied by a manim without this patch; the retry in mtk_cli remakes it
+        raise RuntimeError(f"empty text cache {path}")
+
+    def clean(tmp):
+        Path(tmp).write_text(src)
+        _strip(tmp)
+    _replace(path, clean)
+
+
+def _generate_mobject(self):
+    """SVGMobject.generate_mobject, with a temp file per process: manim's is shared by every scene using this SVG."""
+    path = self.get_file_path()
+    tmp = path.with_name(f"{path.stem}.{os.getpid()}_{path.suffix}")
+    self.modify_xml_tree(ET.parse(path)).write(tmp)
+    svg = se.SVG.parse(tmp)
+    tmp.unlink()
+    mobjects, self.id_to_vgroup_dict = self.get_mobjects_from(svg)
+    self.add(*mobjects)
+    self.flip(RIGHT)
+    return self
+
+
+def _tex_to_svg_file(expression, environment=None, tex_template=None, _make=tex_mobject.tex_to_svg_file):
+    """manim's LaTeX cache, one expression at a time across processes: a scene reading a .dvi another is still writing
+    fails, and a check that fails twice shows its writer a crash that isn't there."""
+    d = config.get_dir("tex_dir")
+    d.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha1(f"{expression}|{environment}".encode()).hexdigest()[:16]
+    with open(d / f".{key}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _make(expression, environment, tex_template)
+
+
+tex_mobject.tex_to_svg_file = _tex_to_svg_file
+_text2svg = manimpango.text2svg
+manimpango.text2svg = lambda s, size, ls, lig, path, *a: (_replace(path, lambda t: _text2svg(s, size, ls, lig, t, *a)), path)[1]
+PangoUtils.remove_last_M = staticmethod(_remove_last_m)
+SVGMobject.generate_mobject = _generate_mobject
 
 # concept -> color, used by E(); set once per video with colors(p=SKY, q=MINT, ...) or COLORS.update({...})
 COLORS = {}
@@ -314,6 +371,7 @@ SYMBOLS = re.compile(r"[=+^_\\]|[Ͱ-Ͽ←-⋿]")
 FROZEN = 6.0  # seconds of narration over an unchanging picture before lint complains
 QUIET = 4.0  # seconds without narration (inside a narrated scene) before lint complains
 SNAP = os.environ.get("MTK_SNAP")  # `mtk check` sets it: a folder for one still per beat (the storyboard)
+AT = os.environ.get("MTK_AT")  # `mtk check --at`: stills at these scene times instead of at the beats
 
 
 def _texts(m):
@@ -345,11 +403,16 @@ class Narrated:
 
     def setup(self):
         super().setup()
+        if os.environ.get("MTK_AGENT"):  # `mtk render --agent`
+            from .agent import install
+            install(self)
         if SNAP:  # storyboard pass: step every frame (updaters, traced paths stay exact) but draw only the stills
             r = self.renderer
+            self._at = sorted(float(x) for x in AT.split(",")) if AT else []
 
             def tick(*a, **k):  # what CairoRenderer.render does, minus drawing and writing the frame
                 r.time += 1 / r.camera.frame_rate
+                self._snap_at()
             r.render = tick
 
     def _frame(self):
@@ -428,15 +491,31 @@ class Narrated:
         super().play(*args, **kw)
         if not all(isinstance(a, Wait) for a in args):
             self._dirty = True  # the picture changed since the last storyboard still
+        if SNAP:
+            self._snap_at()  # a time inside a Wait: frozen frames skip tick()
         if self.lint_on:
             self._lint()
 
-    def snap(self, label=""):
+    def _snap_at(self):
+        while self._at and self.time >= self._at[0]:
+            self.snap(f"at {self._at.pop(0):g}s", forced=True)
+
+    def _on_screen(self):
+        """{label: [x, y, w, h, color]} of the visible text, for `mtk check --agent`'s beat-to-beat diff."""
+        out = {}
+        for t in [t for m in self._lint_roots() for t in _texts(m)]:
+            pts = t.family_members_with_points()
+            if max((x.get_fill_opacity() for x in pts), default=0) > 0.05:
+                out[_label(t)] = [round(float(v), 2) for v in (*t.get_center()[:2], t.width, t.height)] + [
+                    pts[0].get_fill_color().to_hex().lower()]
+        return out
+
+    def snap(self, label="", forced=False):
         """Save a storyboard still now (only under `mtk check`). say()/beat() and wipe() call it for you."""
-        if not SNAP:
+        if not SNAP or (AT and not forced):
             return
         shots = self.__dict__.setdefault("_snaps", [])
-        if shots and not getattr(self, "_dirty", True):
+        if shots and not getattr(self, "_dirty", True) and not forced:
             return
         self._dirty = False
         from PIL import Image
@@ -447,7 +526,7 @@ class Narrated:
         d = Path(SNAP)
         d.mkdir(parents=True, exist_ok=True)
         Image.fromarray(r.get_frame()).convert("RGB").save(d / f"{len(shots):02d}.png")
-        shots.append({"t": round(self.time, 2), "text": label})
+        shots.append({"t": round(self.time, 2), "text": label, "on": self._on_screen()})
 
     def tear_down(self):
         super().tear_down()
